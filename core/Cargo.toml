@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/Danroyal001/rtn"
-rust-version = "1.80"
+rust-version = "1.85"
 
 [workspace.dependencies]
 rtn-core = { path = "crates/rtn-core" }

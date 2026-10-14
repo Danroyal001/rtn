@@ -32,13 +32,8 @@ fn adds_and_finds_subscribers_by_msisdn_and_imsi() {
 fn refuses_duplicate_msisdn_and_imsi() {
     let mut net = network_with(1, 0);
     let existing = net.subscriber(&msisdn(1)).unwrap().imsi.clone();
-    let again = NewSubscriber {
-        msisdn: msisdn(1),
-        imsi: None,
-        name: "Again".into(),
-        plan_id: None,
-        pin: "1234".into(),
-    };
+    let again =
+        NewSubscriber { msisdn: msisdn(1), imsi: None, name: "Again".into(), plan_id: None, pin: "1234".into() };
     assert!(matches!(net.add_subscriber(again, T0), Err(RtnError::DuplicateSubscriber)));
     let same_imsi = NewSubscriber {
         msisdn: msisdn(9),
@@ -53,13 +48,7 @@ fn refuses_duplicate_msisdn_and_imsi() {
 #[test]
 fn pin_must_be_four_to_six_digits() {
     let mut net = Network::new();
-    let bad = NewSubscriber {
-        msisdn: msisdn(1),
-        imsi: None,
-        name: "A".into(),
-        plan_id: None,
-        pin: "12a4".into(),
-    };
+    let bad = NewSubscriber { msisdn: msisdn(1), imsi: None, name: "A".into(), plan_id: None, pin: "12a4".into() };
     assert!(matches!(net.add_subscriber(bad, T0), Err(RtnError::InvalidPin)));
 }
 

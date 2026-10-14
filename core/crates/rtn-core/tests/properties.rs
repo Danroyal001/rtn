@@ -12,14 +12,20 @@ fn op_strategy() -> impl Strategy<Value = (u8, Op, u64)> {
         (who.clone(), 0u64..200_000).prop_map(|(n, amount)| Op::TopUp { msisdn: msisdn(n), amount }),
         (who.clone(), prop::sample::select(vec!["daily-100mb", "weekly-1gb", "monthly-3gb", "nope"]))
             .prop_map(|(n, b)| Op::BuyBundle { msisdn: msisdn(n), bundle_id: b.into() }),
-        (who.clone(), who.clone(), 0u64..60_000)
-            .prop_map(|(a, b, amount)| Op::Transfer { from: msisdn(a), to: msisdn(b), amount }),
+        (who.clone(), who.clone(), 0u64..60_000).prop_map(|(a, b, amount)| Op::Transfer {
+            from: msisdn(a),
+            to: msisdn(b),
+            amount
+        }),
         (who.clone(), 0u64..60_000).prop_map(|(n, amount)| Op::Borrow { msisdn: msisdn(n), amount }),
         (who.clone(), 0u64..(300 * MB)).prop_map(|(n, bytes)| Op::DataUsage { msisdn: msisdn(n), bytes }),
         (who.clone(), 0u32..8).prop_map(|(n, k)| Op::VoiceStart { msisdn: msisdn(n), callee: format!("call-{k}") }),
         (0u32..8, 0u64..2_000).prop_map(|(k, used)| Op::VoiceEnd { session_id: format!("v{k}"), used_seconds: used }),
-        (who.clone(), who, "[a-z ]{0,400}")
-            .prop_map(|(a, b, text)| Op::SmsSubmit { from: msisdn(a), to: msisdn(b), text }),
+        (who.clone(), who, "[a-z ]{0,400}").prop_map(|(a, b, text)| Op::SmsSubmit {
+            from: msisdn(a),
+            to: msisdn(b),
+            text
+        }),
     ];
     // (request id slot, op, time step in seconds). A small id space makes replays common.
     (0u8..40, op, 0u64..7_200)

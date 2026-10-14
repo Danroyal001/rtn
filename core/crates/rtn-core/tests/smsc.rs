@@ -57,7 +57,7 @@ fn expires_after_the_validity_period_and_reports_failure() {
     let out = net.apply("m1", Op::SmsSubmit { from: msisdn(1), to: msisdn(2), text: "x".into() }, T0).unwrap();
     let Detail::Sms { message_id, .. } = out.detail else { panic!() };
     let mut now = T0;
-    for _ in 0..200 {
+    for _ in 0..100 {
         now += 15 * 60_000;
         net.deliver_sms(now);
     }

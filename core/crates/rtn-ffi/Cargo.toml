@@ -1,0 +1,18 @@
+[package]
+name = "rtn-ffi"
+description = "A C ABI over rtn-core for in-process callers (Dart FFI, C, anything with a C FFI)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "rtn_ffi"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+rtn-core.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true

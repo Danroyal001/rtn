@@ -70,7 +70,8 @@ fn voice_reserves_then_bills_exact_seconds_and_releases_the_rest() {
     let Detail::VoiceGranted { granted_seconds, .. } = start.detail else { panic!("{start:?}") };
     assert!(granted_seconds > 0);
     assert_eq!(start.balance.reserved, granted_seconds * rate);
-    let end = net.apply("call-1:end", Op::VoiceEnd { session_id: "call-1".into(), used_seconds: 37 }, T0 + 37_000).unwrap();
+    let end =
+        net.apply("call-1:end", Op::VoiceEnd { session_id: "call-1".into(), used_seconds: 37 }, T0 + 37_000).unwrap();
     assert_eq!(end.charged, 37 * rate);
     assert_eq!(end.balance.reserved, 0);
     assert_eq!(end.balance.airtime, 10_000 - 37 * rate);
