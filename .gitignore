@@ -1,0 +1,8 @@
+target/
+build/
+.dart_tool/
+*.iml
+.idea/
+.vscode/
+.env.local
+rtn-state.json
