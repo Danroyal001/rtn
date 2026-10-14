@@ -1,0 +1,22 @@
+[package]
+name = "rtn-cli"
+description = "The rtn command: run the network, seed it, simulate traffic and talk to it."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "rtn"
+path = "src/main.rs"
+
+[dependencies]
+rtn-core.workspace = true
+rtn-api.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+axum.workspace = true
+tokio.workspace = true
+clap.workspace = true
+ureq.workspace = true

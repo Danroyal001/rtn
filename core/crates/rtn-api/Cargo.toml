@@ -1,0 +1,23 @@
+[package]
+name = "rtn-api"
+description = "RTN's HTTP/JSON API over one rtn-core network."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rtn-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+axum.workspace = true
+tokio.workspace = true
+parking_lot.workspace = true
+rand.workspace = true
+sha2.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+tower.workspace = true
+http-body-util.workspace = true
