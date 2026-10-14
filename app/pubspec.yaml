@@ -53,6 +53,11 @@ dartvel:
   admin:
     enabled: false
 
+hooks:
+  user_defines:
+    dartvel_shelf:
+      embed_server: true
+
   transitions:
     default: fade
     durationMs: 150

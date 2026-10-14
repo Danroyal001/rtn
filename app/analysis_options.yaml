@@ -10,6 +10,7 @@ analyzer:
     - "lib/dartvel_client/**"
     - ".dart_tool/**"
     - build/**
+    - web/**
 
 linter:
   rules:
