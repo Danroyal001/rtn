@@ -69,5 +69,5 @@ fn barring_a_subscriber_stops_charging_but_not_top_ups() {
     net.set_status(&msisdn(1), Status::Barred).unwrap();
     let data = net.apply("d1", rtn_core::Op::DataUsage { msisdn: msisdn(1), bytes: 1000 }, T0);
     assert!(matches!(data, Err(RtnError::Barred)));
-    assert!(net.apply("t1", rtn_core::Op::TopUp { msisdn: msisdn(1), amount: 100 }, T0).is_ok());
+    assert!(net.apply("t1", rtn_core::Op::TopUp { msisdn: msisdn(1), amount: 100, via: None }, T0).is_ok());
 }

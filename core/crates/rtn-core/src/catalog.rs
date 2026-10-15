@@ -26,14 +26,44 @@ pub struct Bundle {
     pub data_bytes: u64,
     pub price: Units,
     pub validity_days: u32,
+    /// A line shown with the bundle when it is on offer, such as "Best value".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub offer: Option<String>,
 }
 
-/// Rating plans and the bundle catalogue.
+/// Data bought with loyalty points.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reward {
+    pub id: String,
+    pub name: String,
+    pub points: u64,
+    pub data_bytes: u64,
+    pub validity_days: u32,
+}
+
+/// Rating plans, the bundle catalogue and the loyalty rewards.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Catalog {
     plans: BTreeMap<String, RatingPlan>,
     bundles: Vec<Bundle>,
     pub default_plan: String,
+    #[serde(default = "default_rewards")]
+    rewards: Vec<Reward>,
+}
+
+fn default_rewards() -> Vec<Reward> {
+    let reward = |id: &str, name: &str, points: u64, mb: u64, days: u32| Reward {
+        id: id.into(),
+        name: name.into(),
+        points,
+        data_bytes: mb * MB,
+        validity_days: days,
+    };
+    vec![
+        reward("points-250mb", "Bonus 250MB", 100, 250, 3),
+        reward("points-1gb", "Bonus 1GB", 350, 1024, 7),
+        reward("points-3gb", "Bonus 3GB", 900, 3 * 1024, 14),
+    ]
 }
 
 impl Default for Catalog {
@@ -60,6 +90,11 @@ impl Default for Catalog {
             data_bytes: mb * MB,
             price: naira * 100,
             validity_days: days,
+            offer: None,
+        };
+        let offer = |mut b: Bundle, text: &str| {
+            b.offer = Some(text.into());
+            b
         };
         Self {
             plans: plans.into_iter().map(|p| (p.id.clone(), p)).collect(),
@@ -67,9 +102,12 @@ impl Default for Catalog {
                 bundle("daily-100mb", "Daily 100MB", 100, 100, 1),
                 bundle("weekly-1gb", "Weekly 1GB", 1024, 500, 7),
                 bundle("monthly-3gb", "Monthly 3GB", 3 * 1024, 1_500, 30),
-                bundle("monthly-10gb", "Monthly 10GB", 10 * 1024, 3_500, 30),
+                offer(bundle("monthly-10gb", "Monthly 10GB", 10 * 1024, 3_500, 30), "Best value"),
+                offer(bundle("weekend-2gb", "Weekend 2GB", 2 * 1024, 400, 3), "Friday to Sunday"),
+                bundle("monthly-25gb", "Monthly 25GB", 25 * 1024, 7_500, 30),
             ],
             default_plan: "pulse".into(),
+            rewards: default_rewards(),
         }
     }
 }
@@ -100,6 +138,14 @@ impl Catalog {
 
     pub fn bundles(&self) -> &[Bundle] {
         &self.bundles
+    }
+
+    pub fn rewards(&self) -> &[Reward] {
+        &self.rewards
+    }
+
+    pub fn reward(&self, id: &str) -> Option<&Reward> {
+        self.rewards.iter().find(|r| r.id == id)
     }
 
     /// Adds a plan or replaces the one with its id. A rate change applies to the next charge;

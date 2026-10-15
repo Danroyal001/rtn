@@ -18,12 +18,22 @@ extern "C" {
 #endif // __cplusplus
 
 /**
- * A new, empty network with the default catalogue. Free it with [`rtn_network_free`].
+ * A new, empty network with the default catalogue, kept in memory only. Free it with
+ * [`rtn_network_free`].
  */
 struct RtnNetwork *rtn_network_new(void);
 
 /**
- * A network restored from a snapshot (`{"method":"snapshot"}` or the API's state file), or null
+ * The network kept in the directory `dir`, created when it does not exist: every call that
+ * changes it is journalled there before it is answered. Null when the directory cannot be used.
+ *
+ * # Safety
+ * `dir` must be a valid NUL-terminated string.
+ */
+struct RtnNetwork *rtn_network_open(const char *dir);
+
+/**
+ * A network restored from a snapshot (`{"method":"snapshot"}`), kept in memory only, or null
  * when the JSON is not a snapshot.
  *
  * # Safety
@@ -32,7 +42,7 @@ struct RtnNetwork *rtn_network_new(void);
 struct RtnNetwork *rtn_network_from_json(const char *json);
 
 /**
- * Frees a network. Null is ignored.
+ * Frees a network, flushing its journal. Null is ignored.
  *
  * # Safety
  * `net` must come from this library and not be used afterwards.
@@ -47,6 +57,15 @@ void rtn_network_free(struct RtnNetwork *net);
  * `net` must be a live handle and `request` a valid NUL-terminated string.
  */
 char *rtn_network_call(struct RtnNetwork *net, const char *request);
+
+/**
+ * Writes a snapshot and empties the journal. Returns false when that failed; the journal is then
+ * left as it was, which is still correct.
+ *
+ * # Safety
+ * `net` must be a live handle.
+ */
+bool rtn_network_compact(struct RtnNetwork *net);
 
 /**
  * Frees a string this library returned. Null is ignored.

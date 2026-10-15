@@ -1,24 +1,27 @@
-//! A C ABI over one in-process [`Network`].
+//! A C ABI over one in-process RTN [`Node`]: the network, its traffic simulator and, when opened
+//! on a directory, its journal.
 //!
-//! Every call is JSON in and JSON out, through [`rtn_core::rpc`], so a binding needs four
+//! Every call is JSON in and JSON out, through [`rtn_core::rpc`], so a binding needs a handful of
 //! functions and no structs:
 //!
 //! ```c
-//! RtnNetwork *net = rtn_network_new();
+//! RtnNetwork *net = rtn_network_open("/var/lib/rtn");   // or rtn_network_new() for memory only
 //! char *answer = rtn_network_call(net, "{\"method\":\"catalog\"}");
 //! // {"ok": {...}} or {"error": {"code": "...", "message": "..."}}
 //! rtn_string_free(answer);
 //! rtn_network_free(net);
 //! ```
 //!
-//! A network is not thread-safe: one caller at a time per handle.
+//! A handle may be called from several threads; calls on one handle run one at a time.
 use std::ffi::{c_char, CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::Mutex;
 
-use rtn_core::{rpc, Network};
+use rtn_core::node::Node;
+use rtn_core::Network;
 
 /// An opaque handle to one network.
-pub struct RtnNetwork(Network);
+pub struct RtnNetwork(Mutex<Node>);
 
 fn into_c(text: String) -> *mut c_char {
     CString::new(text)
@@ -26,13 +29,35 @@ fn into_c(text: String) -> *mut c_char {
         .into_raw()
 }
 
-/// A new, empty network with the default catalogue. Free it with [`rtn_network_free`].
-#[no_mangle]
-pub extern "C" fn rtn_network_new() -> *mut RtnNetwork {
-    Box::into_raw(Box::new(RtnNetwork(Network::new())))
+fn boxed(node: Node) -> *mut RtnNetwork {
+    Box::into_raw(Box::new(RtnNetwork(Mutex::new(node))))
 }
 
-/// A network restored from a snapshot (`{"method":"snapshot"}` or the API's state file), or null
+/// A new, empty network with the default catalogue, kept in memory only. Free it with
+/// [`rtn_network_free`].
+#[no_mangle]
+pub extern "C" fn rtn_network_new() -> *mut RtnNetwork {
+    boxed(Node::in_memory())
+}
+
+/// The network kept in the directory `dir`, created when it does not exist: every call that
+/// changes it is journalled there before it is answered. Null when the directory cannot be used.
+///
+/// # Safety
+/// `dir` must be a valid NUL-terminated string.
+#[no_mangle]
+pub unsafe extern "C" fn rtn_network_open(dir: *const c_char) -> *mut RtnNetwork {
+    if dir.is_null() {
+        return std::ptr::null_mut();
+    }
+    let Ok(path) = CStr::from_ptr(dir).to_str() else { return std::ptr::null_mut() };
+    match catch_unwind(|| Node::open(path)) {
+        Ok(Ok(node)) => boxed(node),
+        _ => std::ptr::null_mut(),
+    }
+}
+
+/// A network restored from a snapshot (`{"method":"snapshot"}`), kept in memory only, or null
 /// when the JSON is not a snapshot.
 ///
 /// # Safety
@@ -44,12 +69,12 @@ pub unsafe extern "C" fn rtn_network_from_json(json: *const c_char) -> *mut RtnN
     }
     let Ok(text) = CStr::from_ptr(json).to_str() else { return std::ptr::null_mut() };
     match Network::from_json(text) {
-        Ok(net) => Box::into_raw(Box::new(RtnNetwork(net))),
+        Ok(net) => boxed(Node::from_network(net)),
         Err(_) => std::ptr::null_mut(),
     }
 }
 
-/// Frees a network. Null is ignored.
+/// Frees a network, flushing its journal. Null is ignored.
 ///
 /// # Safety
 /// `net` must come from this library and not be used afterwards.
@@ -70,14 +95,33 @@ pub unsafe extern "C" fn rtn_network_call(net: *mut RtnNetwork, request: *const 
     if net.is_null() || request.is_null() {
         return into_c("{\"error\":{\"code\":\"invalid_request\",\"message\":\"null argument\"}}".into());
     }
-    let net = &mut (*net).0;
+    let handle = &*net;
     let Ok(text) = CStr::from_ptr(request).to_str() else {
         return into_c("{\"error\":{\"code\":\"invalid_request\",\"message\":\"not UTF-8\"}}".into());
     };
-    match catch_unwind(AssertUnwindSafe(|| rpc::handle_json(net, text))) {
+    let answer = catch_unwind(AssertUnwindSafe(|| {
+        let mut node = handle.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        node.handle_json(text)
+    }));
+    match answer {
         Ok(answer) => into_c(answer),
         Err(_) => into_c("{\"error\":{\"code\":\"internal\",\"message\":\"the core panicked\"}}".into()),
     }
+}
+
+/// Writes a snapshot and empties the journal. Returns false when that failed; the journal is then
+/// left as it was, which is still correct.
+///
+/// # Safety
+/// `net` must be a live handle.
+#[no_mangle]
+pub unsafe extern "C" fn rtn_network_compact(net: *mut RtnNetwork) -> bool {
+    if net.is_null() {
+        return false;
+    }
+    let handle = &*net;
+    let mut node = handle.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    node.compact().is_ok()
 }
 
 /// Frees a string this library returned. Null is ignored.
@@ -126,10 +170,28 @@ mod tests {
         let restored = unsafe { rtn_network_from_json(snapshot.as_ptr()) };
         assert!(!restored.is_null());
         let balance = call(restored, r#"{"method":"balance","msisdn":"2349990000001","now":1800000000000}"#);
-        assert_eq!(balance["ok"]["bundles"].as_array().unwrap().len(), 1);
+        assert!(balance["ok"]["bundles"].as_array().unwrap().iter().any(|b| b["bundle_id"] == "daily-100mb"));
         unsafe {
             rtn_network_free(net);
             rtn_network_free(restored);
         }
+    }
+
+    #[test]
+    fn an_opened_network_survives_being_freed_and_opened_again() {
+        let dir = std::env::temp_dir().join(format!("rtn-ffi-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = CString::new(dir.to_str().unwrap()).unwrap();
+        let net = unsafe { rtn_network_open(path.as_ptr()) };
+        assert!(!net.is_null());
+        call(net, r#"{"method":"seed","count":2,"seed":1,"now":1800000000000}"#);
+        assert!(unsafe { rtn_network_compact(net) });
+        call(net, r#"{"method":"set_name","msisdn":"2349990000002","name":"Kept Name"}"#);
+        unsafe { rtn_network_free(net) };
+        let net = unsafe { rtn_network_open(path.as_ptr()) };
+        let sub = call(net, r#"{"method":"subscriber","msisdn":"2349990000002"}"#);
+        assert_eq!(sub["ok"]["name"], "Kept Name");
+        unsafe { rtn_network_free(net) };
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

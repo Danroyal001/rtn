@@ -1,0 +1,81 @@
+name: rtn_app
+description: MyRTN, the self-service app for RTN lines, and the RTN operator console, built with Dartvel.
+publish_to: "none"
+version: 0.2.0
+
+environment:
+  sdk: ">=3.13.0 <4.0.0"
+  flutter: ">=3.47.0"
+platforms:
+  web:
+  android:
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
+  go_router: ^14.2.0
+  dio: ^5.5.0
+  ffi: ^2.1.0
+  crypto: ^3.0.6
+  dartvel_core: ^0.12.2
+  dartvel_shelf: ^0.12.2
+  dartvel_flutter: ^0.12.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  lints: ^4.0.0
+  dartvel_cli: ^0.12.2
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/
+
+dartvel:
+  org: dev.rtn
+  backendHost: 127.0.0.1
+  backendPort: 8740
+  devBackendHost: http://localhost:8740
+  prodBackendHost: http://localhost:8740
+  pagesDir: lib/pages
+  backendDir: lib/backend
+  apiBasePath: /api
+  envFiles: [.env, .env.local]
+  plugins: []
+  ota: false
+  platforms:
+    - web
+    - android
+  auth:
+    # MyRTN signs in with a number and a code sent by SMS (lib/pages/signin.dart),
+    # not Dartvel's e-mail pages. Naming the page here is what lets the server
+    # send a signed-out visitor to it from a guarded page.
+    pages:
+      signIn: /signin
+      signUp: false
+      profile: false
+      security: false
+      sessions: false
+      delete: false
+  admin:
+    enabled: false
+  transitions:
+    default: fade
+    durationMs: 150
+    curve: easeInOut
+  pwa:
+    name: MyRTN
+    shortName: MyRTN
+    icon: assets/icon.png
+    themeColor: "#0F766E"
+    backgroundColor: "#F7F5F2"
+  splash:
+    color: "#F7F5F2"
+    darkColor: "#0E1414"
+  seo:
+    siteName: MyRTN
+    defaultTitle: MyRTN
+    defaultDescription: Your RTN line in one place. Balance, data, recharge, transfers, loans and support.

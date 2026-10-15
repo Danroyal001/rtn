@@ -9,9 +9,9 @@ const SUBS: u32 = 4;
 fn op_strategy() -> impl Strategy<Value = (u8, Op, u64)> {
     let who = 1..=SUBS;
     let op = prop_oneof![
-        (who.clone(), 0u64..200_000).prop_map(|(n, amount)| Op::TopUp { msisdn: msisdn(n), amount }),
+        (who.clone(), 0u64..200_000).prop_map(|(n, amount)| Op::TopUp { msisdn: msisdn(n), amount, via: None }),
         (who.clone(), prop::sample::select(vec!["daily-100mb", "weekly-1gb", "monthly-3gb", "nope"]))
-            .prop_map(|(n, b)| Op::BuyBundle { msisdn: msisdn(n), bundle_id: b.into() }),
+            .prop_map(|(n, b)| Op::BuyBundle { msisdn: msisdn(n), bundle_id: b.into(), beneficiary: None }),
         (who.clone(), who.clone(), 0u64..60_000).prop_map(|(a, b, amount)| Op::Transfer {
             from: msisdn(a),
             to: msisdn(b),
@@ -21,6 +21,16 @@ fn op_strategy() -> impl Strategy<Value = (u8, Op, u64)> {
         (who.clone(), 0u64..(300 * MB)).prop_map(|(n, bytes)| Op::DataUsage { msisdn: msisdn(n), bytes }),
         (who.clone(), 0u32..8).prop_map(|(n, k)| Op::VoiceStart { msisdn: msisdn(n), callee: format!("call-{k}") }),
         (0u32..8, 0u64..2_000).prop_map(|(k, used)| Op::VoiceEnd { session_id: format!("v{k}"), used_seconds: used }),
+        (who.clone(), who.clone(), prop::sample::select(vec!["daily-100mb", "weekly-1gb"])).prop_map(|(a, b, id)| {
+            Op::BuyBundle { msisdn: msisdn(a), bundle_id: id.into(), beneficiary: Some(msisdn(b)) }
+        }),
+        (who.clone(), who.clone(), 0u64..(1200 * MB)).prop_map(|(a, b, bytes)| Op::ShareData {
+            from: msisdn(a),
+            to: msisdn(b),
+            bytes
+        }),
+        (who.clone(), prop::sample::select(vec!["points-250mb", "points-1gb", "nope"]))
+            .prop_map(|(n, r)| Op::RedeemPoints { msisdn: msisdn(n), reward_id: r.into() }),
         (who.clone(), who, "[a-z ]{0,400}").prop_map(|(a, b, text)| Op::SmsSubmit {
             from: msisdn(a),
             to: msisdn(b),
@@ -45,12 +55,14 @@ fn check_invariants(net: &mut Network, now: u64) {
     for n in 1..=SUBS {
         let b = net.balance(&msisdn(n), now).unwrap();
         assert!(b.reserved <= b.airtime, "reserved {} > airtime {}", b.reserved, b.airtime);
-        let (mut air, mut data, mut loan) = (0i128, 0i128, 0i128);
+        let (mut air, mut data, mut loan, mut points) = (0i128, 0i128, 0i128, 0i128);
         for e in net.history(&msisdn(n)) {
             air += e.airtime_delta as i128;
             data += e.data_delta as i128;
             loan += e.loan_delta as i128;
+            points += e.points_delta as i128;
         }
+        assert_eq!(points, b.points as i128, "points equal the sum of their ledger");
         assert_eq!(air, b.airtime as i128, "airtime equals the sum of its ledger");
         assert_eq!(data, b.data_bytes as i128, "data equals the sum of its ledger");
         assert_eq!(loan, b.loan as i128, "loan equals the sum of its ledger");

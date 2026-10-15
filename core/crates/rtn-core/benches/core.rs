@@ -8,7 +8,8 @@ fn seeded(count: u32) -> (Network, Vec<Msisdn>) {
     let subs = seed::populate(&mut net, count, 1, T0).unwrap();
     let numbers: Vec<Msisdn> = subs.into_iter().map(|s| s.msisdn).collect();
     for (i, m) in numbers.iter().enumerate() {
-        net.apply(&format!("bench-topup-{i}"), Op::TopUp { msisdn: m.clone(), amount: 10_000_000 }, T0).unwrap();
+        net.apply(&format!("bench-topup-{i}"), Op::TopUp { msisdn: m.clone(), amount: 10_000_000, via: None }, T0)
+            .unwrap();
     }
     (net, numbers)
 }
