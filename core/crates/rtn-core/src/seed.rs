@@ -56,11 +56,11 @@ pub fn populate(net: &mut Network, count: u32, seed: u64, now: u64) -> Result<Ve
             now,
         )?;
         let amount = rng.range(5, 51) * 10_000;
-        net.apply(&format!("seed:{msisdn}:topup"), Op::TopUp { msisdn: msisdn.clone(), amount }, now)?;
+        net.apply(&format!("seed:{msisdn}:topup"), Op::TopUp { msisdn: msisdn.clone(), amount, via: None }, now)?;
         if rng.chance(330_000) {
             let _ = net.apply(
                 &format!("seed:{msisdn}:bundle"),
-                Op::BuyBundle { msisdn: msisdn.clone(), bundle_id: "weekly-1gb".into() },
+                Op::BuyBundle { msisdn: msisdn.clone(), bundle_id: "weekly-1gb".into(), beneficiary: None },
                 now,
             );
         }

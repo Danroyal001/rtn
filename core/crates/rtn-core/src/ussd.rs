@@ -52,7 +52,8 @@ pub(crate) struct UssdSession {
     last_at: u64,
 }
 
-const MAIN_MENU: &str = "RTN\n1. Balance\n2. Data bundles\n3. Transfer airtime\n4. Borrow airtime\n5. My number";
+const MAIN_MENU: &str =
+    "RTN\n1. Balance\n2. Data bundles\n3. Transfer airtime\n4. Borrow airtime\n5. My number\n6. Loyalty points";
 
 fn sentence(error: &RtnError) -> String {
     let text = error.to_string();
@@ -121,6 +122,25 @@ impl Network {
             ["123", choice] => self.ussd_step(session, msisdn, Menu::Main, choice, now),
             ["312"] => self.ussd_step(session, msisdn, Menu::Main, "2", now),
             ["303"] => self.ussd_step(session, msisdn, Menu::Main, "4", now),
+            ["555", pin] => {
+                let id = format!("ussd:{session}:voucher");
+                let reply =
+                    match self.apply(&id, Op::RedeemVoucher { msisdn: msisdn.clone(), pin: (*pin).to_owned() }, now) {
+                        Ok(out) => {
+                            let Detail::Voucher { amount, repaid, .. } = out.detail else {
+                                unreachable!("a voucher outcome")
+                            };
+                            let mut text = format!("Recharge of {} successful.", format_naira(amount));
+                            if repaid > 0 {
+                                text.push_str(&format!(" {} loan repaid.", format_naira(repaid)));
+                            }
+                            text.push_str(&format!(" Airtime: {}.", format_naira(out.balance.airtime)));
+                            text
+                        }
+                        Err(e) => sentence(&e),
+                    };
+                (UssdReply::done(reply), None)
+            }
             ["321", to, amount, pin] => {
                 let Ok(to) = Msisdn::parse(to) else {
                     return (UssdReply::done("That is not a phone number."), None);
@@ -184,6 +204,16 @@ impl Network {
                     (UssdReply::more(text), Some(Menu::Borrow { offers }))
                 }
                 "5" => (UssdReply::done(format!("Your number is {msisdn}.")), None),
+                "6" => match self.peek_balance(msisdn, now) {
+                    Ok(b) => (
+                        UssdReply::done(format!(
+                            "You have {} points. Spend them on bonus data in the MyRTN app.",
+                            b.points
+                        )),
+                        None,
+                    ),
+                    Err(e) => (UssdReply::done(sentence(&e)), None),
+                },
                 _ => invalid(MAIN_MENU.into(), Menu::Main),
             },
             Menu::Bundles => {
@@ -208,7 +238,11 @@ impl Network {
                     return invalid("1. Confirm\n0. Back".into(), Menu::BundleConfirm { bundle_id });
                 }
                 let id = format!("ussd:{session}:bundle:{bundle_id}");
-                match self.apply(&id, Op::BuyBundle { msisdn: msisdn.clone(), bundle_id: bundle_id.clone() }, now) {
+                match self.apply(
+                    &id,
+                    Op::BuyBundle { msisdn: msisdn.clone(), bundle_id: bundle_id.clone(), beneficiary: None },
+                    now,
+                ) {
                     Ok(out) => {
                         let name = self.catalog.bundle(&bundle_id).map(|b| b.name.clone()).unwrap_or(bundle_id);
                         (

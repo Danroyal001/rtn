@@ -5,7 +5,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
 use rtn_api::{router, AppState, Config};
-use rtn_core::{seed, Network};
+use rtn_core::node::Node;
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
@@ -17,20 +17,19 @@ struct Harness {
 }
 
 fn harness() -> Harness {
+    harness_on(Node::in_memory(), true)
+}
+
+fn harness_on(node: Node, seed: bool) -> Harness {
     let clock = Arc::new(AtomicU64::new(1_800_000_000_000));
-    let mut net = Network::new();
-    seed::populate(&mut net, 5, 1, clock.load(Ordering::SeqCst)).unwrap();
     let tick = clock.clone();
     let state = AppState::new(
-        net,
-        Config {
-            admin_token: ADMIN.into(),
-            state_path: None,
-            clock: Arc::new(move || tick.load(Ordering::SeqCst)),
-            simulate: false,
-            simulator_seed: 1,
-        },
+        node,
+        Config { admin_token: ADMIN.into(), clock: Arc::new(move || tick.load(Ordering::SeqCst)), simulate: false },
     );
+    if seed {
+        state.run(json!({ "method": "seed", "count": 5, "seed": 1, "now": clock.load(Ordering::SeqCst) })).unwrap();
+    }
     Harness { app: router(state), clock }
 }
 
@@ -241,4 +240,101 @@ async fn sessions_expire() {
     h.clock.fetch_add(rtn_api::SESSION_MS + 1, Ordering::SeqCst);
     let (status, _) = h.call("GET", "/v1/me", Some(&token), None).await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn sign_in_with_a_code_sent_by_sms() {
+    let h = harness();
+    let (status, sent) = h.call("POST", "/v1/auth/otp", None, Some(json!({ "msisdn": ADA }))).await;
+    assert_eq!(status, StatusCode::OK, "{sent}");
+    h.call("POST", "/v1/admin/sms/deliver", Some(ADMIN), None).await;
+    let (_, log) = h.call("GET", "/v1/admin/sms?limit=5", Some(ADMIN), None).await;
+    let text = log[0]["text"].as_str().unwrap().to_owned();
+    let code: String = text.chars().take(6).collect();
+    let (status, _) =
+        h.call("POST", "/v1/auth/otp/verify", None, Some(json!({ "msisdn": ADA, "code": "000000" }))).await;
+    assert!(status == StatusCode::UNAUTHORIZED || code == "000000");
+    let (status, session) =
+        h.call("POST", "/v1/auth/otp/verify", None, Some(json!({ "msisdn": ADA, "code": code }))).await;
+    assert_eq!(status, StatusCode::OK, "{session}");
+    let token = session["token"].as_str().unwrap();
+    let (status, _) = h.call("GET", "/v1/me", Some(token), None).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn the_rpc_route_runs_any_call_for_the_operator_only() {
+    let h = harness();
+    let call = json!({ "method": "line", "msisdn": ADA, "now": 1_800_000_000_000u64 });
+    let (status, _) = h.call("POST", "/v1/admin/rpc", None, Some(call.clone())).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let (status, line) = h.call("POST", "/v1/admin/rpc", Some(ADMIN), Some(call)).await;
+    assert_eq!(status, StatusCode::OK, "{line}");
+    assert_eq!(line["subscriber"]["msisdn"], ADA);
+    let (status, refused) = h
+        .call(
+            "POST",
+            "/v1/admin/rpc",
+            Some(ADMIN),
+            Some(json!({ "method": "verify_otp", "msisdn": ADA, "code": "1", "now": 1 })),
+        )
+        .await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(refused["error"]["code"], "code_expired");
+}
+
+#[tokio::test]
+async fn vouchers_are_printed_by_the_operator_and_redeemed_by_subscribers() {
+    let h = harness();
+    let (status, batch) =
+        h.call("POST", "/v1/admin/vouchers", Some(ADMIN), Some(json!({ "count": 2, "amount": 100_000 }))).await;
+    assert_eq!(status, StatusCode::OK, "{batch}");
+    let pin = batch[0]["pin"].as_str().unwrap();
+    let token = h.login(ADA).await;
+    let (status, out) = h.call("POST", "/v1/me/recharge", Some(&token), Some(json!({ "pin": pin }))).await;
+    assert_eq!(status, StatusCode::OK, "{out}");
+    assert_eq!(out["detail"]["type"], "voucher");
+    let (status, again) = h.call("POST", "/v1/me/recharge", Some(&token), Some(json!({ "pin": pin }))).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{again}");
+    let (_, listed) = h.call("GET", "/v1/admin/vouchers", Some(ADMIN), None).await;
+    assert!(listed.as_array().unwrap().iter().all(|v| v.get("pin").is_none()), "PINs are never listed");
+}
+
+#[tokio::test]
+async fn care_chat_both_ways() {
+    let h = harness();
+    let token = h.login(ADA).await;
+    let (status, thread) = h.call("POST", "/v1/me/care", Some(&token), Some(json!({ "text": "my balance?" }))).await;
+    assert_eq!(status, StatusCode::OK, "{thread}");
+    assert_eq!(thread[1]["author"], "assistant");
+    let (_, desk) = h.call("GET", "/v1/admin/care", Some(ADMIN), None).await;
+    assert_eq!(desk[0]["msisdn"], ADA);
+    let (status, _) =
+        h.call("POST", &format!("/v1/admin/care/{ADA}"), Some(ADMIN), Some(json!({ "text": "Hi" }))).await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, thread) = h.call("GET", "/v1/me/care", Some(&token), None).await;
+    assert_eq!(thread.as_array().unwrap().last().unwrap()["author"], "agent");
+}
+
+#[tokio::test]
+async fn a_server_started_on_the_same_directory_has_the_same_network() {
+    let dir = std::env::temp_dir().join(format!("rtn-api-durable-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    {
+        let h = harness_on(Node::open(&dir).unwrap(), true);
+        let token = h.login(ADA).await;
+        let (status, _) = h
+            .call(
+                "POST",
+                "/v1/me/bundles",
+                Some(&token),
+                Some(json!({ "bundle_id": "weekly-1gb", "request_id": "d1" })),
+            )
+            .await;
+        assert_eq!(status, StatusCode::OK);
+    }
+    let h = harness_on(Node::open(&dir).unwrap(), false);
+    let (_, history) = h.call("GET", &format!("/v1/admin/ledger?msisdn={ADA}"), Some(ADMIN), None).await;
+    assert!(history.as_array().unwrap().iter().any(|e| e["request_id"].as_str().unwrap().ends_with(":d1")));
+    let _ = std::fs::remove_dir_all(&dir);
 }

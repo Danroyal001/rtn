@@ -82,6 +82,8 @@ pub(crate) struct Account {
     reserved: Units,
     bundles: Vec<HeldBundle>,
     loan: Units,
+    #[serde(default)]
+    points: u64,
 }
 
 impl Account {
@@ -92,7 +94,34 @@ impl Account {
     fn data_bytes(&self) -> u64 {
         self.bundles.iter().map(|b| b.bytes_left).sum()
     }
+
+    /// Takes `bytes` from the bundles that expire first. The caller has checked there is enough.
+    /// Returns the latest expiry among the bundles it drew from.
+    fn draw_data(&mut self, bytes: u64) -> u64 {
+        self.bundles.sort_by_key(|b| b.expires_at);
+        let mut left = bytes;
+        let mut latest = 0;
+        for bundle in &mut self.bundles {
+            if left == 0 {
+                break;
+            }
+            let take = left.min(bundle.bytes_left);
+            if take > 0 {
+                latest = latest.max(bundle.expires_at);
+            }
+            bundle.bytes_left -= take;
+            left -= take;
+        }
+        self.bundles.retain(|b| b.bytes_left > 0);
+        latest
+    }
 }
+
+/// Loyalty points earned per unit spent: one point per ₦10.
+pub const UNITS_PER_POINT: Units = 1_000;
+/// The smallest and largest data share.
+pub const SHARE_MIN: u64 = 50 * MB;
+pub const SHARE_MAX: u64 = 10 * 1024 * MB;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub(crate) struct VoiceSession {
@@ -110,10 +139,32 @@ pub enum Op {
     TopUp {
         msisdn: Msisdn,
         amount: Units,
+        /// Where the money came from, for the ledger: "card •••• 4242". None for the operator.
+        #[serde(default)]
+        via: Option<String>,
     },
+    /// Buys a bundle from `msisdn`'s airtime, for `beneficiary` when given.
     BuyBundle {
         msisdn: Msisdn,
         bundle_id: String,
+        #[serde(default)]
+        beneficiary: Option<Msisdn>,
+    },
+    /// Recharges from a scratch-card voucher.
+    RedeemVoucher {
+        msisdn: Msisdn,
+        pin: String,
+    },
+    /// Moves bundle data from one line to another.
+    ShareData {
+        from: Msisdn,
+        to: Msisdn,
+        bytes: u64,
+    },
+    /// Spends loyalty points on a reward from the catalogue.
+    RedeemPoints {
+        msisdn: Msisdn,
+        reward_id: String,
     },
     Transfer {
         from: Msisdn,
@@ -148,14 +199,54 @@ pub enum Op {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Detail {
-    TopUp { repaid: Units },
-    Bundle { bundle_id: String, expires_at: u64 },
-    Transfer { to: Msisdn, amount: Units, fee: Units },
-    Loan { borrowed: Units, owed: Units },
-    Data { from_bundle: u64, payg_bytes: u64 },
-    VoiceGranted { session_id: String, granted_seconds: u64 },
-    VoiceEnded { session_id: String, billed_seconds: u64 },
-    Sms { message_id: String, segments: u32 },
+    TopUp {
+        repaid: Units,
+    },
+    Bundle {
+        bundle_id: String,
+        expires_at: u64,
+        #[serde(default)]
+        beneficiary: Option<Msisdn>,
+    },
+    Voucher {
+        serial: String,
+        amount: Units,
+        repaid: Units,
+    },
+    Share {
+        to: Msisdn,
+        bytes: u64,
+    },
+    Reward {
+        reward_id: String,
+        data_bytes: u64,
+        points: u64,
+    },
+    Transfer {
+        to: Msisdn,
+        amount: Units,
+        fee: Units,
+    },
+    Loan {
+        borrowed: Units,
+        owed: Units,
+    },
+    Data {
+        from_bundle: u64,
+        payg_bytes: u64,
+    },
+    VoiceGranted {
+        session_id: String,
+        granted_seconds: u64,
+    },
+    VoiceEnded {
+        session_id: String,
+        billed_seconds: u64,
+    },
+    Sms {
+        message_id: String,
+        segments: u32,
+    },
 }
 
 /// The result of an applied operation. Replaying the request returns this same value.
@@ -190,6 +281,9 @@ pub struct Balance {
     pub bundles: Vec<BundleBalance>,
     pub loan: Units,
     pub loan_limit: Units,
+    /// Loyalty points.
+    #[serde(default)]
+    pub points: u64,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -205,6 +299,29 @@ pub enum EntryKind {
     Voice,
     Sms,
     Data,
+    BundleReceived,
+    DataShareOut,
+    DataShareIn,
+    RewardRedeemed,
+}
+
+/// How one ledger entry changes an account.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Deltas {
+    pub airtime: i64,
+    pub data: i64,
+    pub loan: i64,
+    pub points: i64,
+}
+
+impl Deltas {
+    pub(crate) fn airtime(amount: i64) -> Self {
+        Self { airtime: amount, ..Self::default() }
+    }
+
+    pub(crate) fn data(bytes: i64) -> Self {
+        Self { data: bytes, ..Self::default() }
+    }
 }
 
 /// One balance change. An account's balances are always the sum of its entries' deltas.
@@ -221,6 +338,10 @@ pub struct LedgerEntry {
     pub airtime_after: Units,
     pub data_after: u64,
     pub loan_after: Units,
+    #[serde(default)]
+    pub points_delta: i64,
+    #[serde(default)]
+    pub points_after: u64,
     pub note: String,
 }
 
@@ -248,9 +369,15 @@ pub struct Network {
     pub(crate) ussd_sessions: BTreeMap<String, UssdSession>,
     pub(crate) smsc: Smsc,
     totals: Totals,
-    next_imsi: u64,
+    pub(crate) next_imsi: u64,
+    #[serde(default)]
+    pub(crate) otps: BTreeMap<Msisdn, crate::selfcare::Otp>,
+    #[serde(default)]
+    pub(crate) vouchers: crate::selfcare::Vouchers,
+    #[serde(default)]
+    pub(crate) care: BTreeMap<Msisdn, Vec<crate::care::CareMessage>>,
     #[serde(skip)]
-    by_imsi: BTreeMap<Imsi, Msisdn>,
+    pub(crate) by_imsi: BTreeMap<Imsi, Msisdn>,
     #[serde(skip)]
     ledger_index: BTreeMap<Msisdn, Vec<usize>>,
     #[serde(skip)]
@@ -270,7 +397,7 @@ fn valid_pin(pin: &str) -> bool {
     (4..=6).contains(&pin.len()) && pin.bytes().all(|b| b.is_ascii_digit())
 }
 
-fn constant_time_eq(a: &str, b: &str) -> bool {
+pub(crate) fn constant_time_eq(a: &str, b: &str) -> bool {
     a.len() == b.len() && a.bytes().zip(b.bytes()).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
@@ -456,7 +583,7 @@ impl Network {
 
     // ----- balances and ledger ----------------------------------------------------------------
 
-    fn active(&self, msisdn: &Msisdn) -> Result<&Subscriber, RtnError> {
+    pub(crate) fn active(&self, msisdn: &Msisdn) -> Result<&Subscriber, RtnError> {
         let subscriber = self.subscribers.get(msisdn).ok_or(RtnError::UnknownSubscriber)?;
         if subscriber.status == Status::Barred {
             return Err(RtnError::Barred);
@@ -464,11 +591,13 @@ impl Network {
         Ok(subscriber)
     }
 
-    fn account(&mut self, msisdn: &Msisdn) -> &mut Account {
+    pub(crate) fn account(&mut self, msisdn: &Msisdn) -> &mut Account {
         self.accounts.entry(msisdn.clone()).or_default()
     }
 
-    /// Expires bundles whose validity has run out, each with a ledger entry, and drops empty ones.
+    /// Expires bundles whose validity has run out, each with a ledger entry dated when it ran
+    /// out, and drops empty ones. Dating the entry by the bundle rather than by the call that
+    /// noticed keeps the ledger the same however often balances are read.
     fn touch(&mut self, msisdn: &Msisdn, now: u64) {
         let account = self.account(msisdn);
         account.bundles.retain(|b| b.bytes_left > 0);
@@ -483,55 +612,65 @@ impl Network {
                 &id,
                 msisdn,
                 EntryKind::BundleExpired,
-                0,
-                -delta(bundle.bytes_left),
-                0,
-                now,
+                Deltas::data(-delta(bundle.bytes_left)),
+                bundle.expires_at,
                 format!("{} expired", bundle.name),
             );
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn post(
+    pub(crate) fn post(
         &mut self,
         request_id: &str,
         msisdn: &Msisdn,
         kind: EntryKind,
-        airtime_delta: i64,
-        data_delta: i64,
-        loan_delta: i64,
+        deltas: Deltas,
         now: u64,
         note: String,
     ) {
-        let (airtime_after, data_after, loan_after) =
-            self.accounts.get(msisdn).map_or((0, 0, 0), |a| (a.airtime, a.data_bytes(), a.loan));
+        let (airtime_after, data_after, loan_after, points_after) =
+            self.accounts.get(msisdn).map_or((0, 0, 0, 0), |a| (a.airtime, a.data_bytes(), a.loan, a.points));
         let entry = LedgerEntry {
             seq: self.ledger.len() as u64 + 1,
             at: now,
             request_id: request_id.to_owned(),
             msisdn: msisdn.clone(),
             kind,
-            airtime_delta,
-            data_delta,
-            loan_delta,
+            airtime_delta: deltas.airtime,
+            data_delta: deltas.data,
+            loan_delta: deltas.loan,
             airtime_after,
             data_after,
             loan_after,
+            points_delta: deltas.points,
+            points_after,
             note,
         };
         self.ledger_index.entry(msisdn.clone()).or_default().push(self.ledger.len());
         self.ledger.push(entry);
     }
 
+    /// Points for spending `units`, added to the account. Returns how many.
+    fn earn(&mut self, msisdn: &Msisdn, units: Units) -> i64 {
+        let points = units / UNITS_PER_POINT;
+        self.account(msisdn).points += points;
+        delta(points)
+    }
+
     fn view(&self, msisdn: &Msisdn) -> Balance {
+        self.view_at(msisdn, 0)
+    }
+
+    /// A subscriber's balances as of `now`, leaving out bundles that have run out, without
+    /// changing anything.
+    fn view_at(&self, msisdn: &Msisdn, now: u64) -> Balance {
         let subscriber = &self.subscribers[msisdn];
         let empty = Account::default();
         let account = self.accounts.get(msisdn).unwrap_or(&empty);
         let mut bundles: Vec<BundleBalance> = account
             .bundles
             .iter()
-            .filter(|b| b.bytes_left > 0)
+            .filter(|b| b.bytes_left > 0 && b.expires_at > now)
             .map(|b| BundleBalance {
                 bundle_id: b.bundle_id.clone(),
                 name: b.name.clone(),
@@ -547,10 +686,11 @@ impl Network {
             airtime: account.airtime,
             reserved: account.reserved,
             available: account.available(),
-            data_bytes: account.data_bytes(),
+            data_bytes: bundles.iter().map(|b| b.bytes_left).sum(),
             bundles,
             loan: account.loan,
             loan_limit: subscriber.loan_limit,
+            points: account.points,
         }
     }
 
@@ -563,6 +703,15 @@ impl Network {
         Ok(self.view(msisdn))
     }
 
+    /// A subscriber's balances as of `now`, read without changing the network. Bundles that have
+    /// run out are left out; their expiry is written to the ledger by the next charge.
+    pub fn peek_balance(&self, msisdn: &Msisdn, now: u64) -> Result<Balance, RtnError> {
+        if !self.subscribers.contains_key(msisdn) {
+            return Err(RtnError::UnknownSubscriber);
+        }
+        Ok(self.view_at(msisdn, now))
+    }
+
     /// A subscriber's ledger entries, oldest first.
     pub fn history(&self, msisdn: &Msisdn) -> Vec<&LedgerEntry> {
         self.ledger_index.get(msisdn).map(|ix| ix.iter().map(|&i| &self.ledger[i]).collect()).unwrap_or_default()
@@ -571,6 +720,11 @@ impl Network {
     /// Every ledger entry, in order.
     pub fn ledger(&self) -> &[LedgerEntry] {
         &self.ledger
+    }
+
+    /// One ledger entry by its sequence number.
+    pub fn ledger_entry(&self, seq: u64) -> Option<&LedgerEntry> {
+        seq.checked_sub(1).and_then(|i| self.ledger.get(i as usize))
     }
 
     pub fn totals(&self) -> Totals {
@@ -596,8 +750,13 @@ impl Network {
         }
         let revenue_before = self.totals.revenue;
         let result = match op.clone() {
-            Op::TopUp { msisdn, amount } => self.top_up(request_id, &msisdn, amount, now),
-            Op::BuyBundle { msisdn, bundle_id } => self.buy_bundle(request_id, &msisdn, &bundle_id, now),
+            Op::TopUp { msisdn, amount, via } => self.top_up(request_id, &msisdn, amount, via.as_deref(), now),
+            Op::BuyBundle { msisdn, bundle_id, beneficiary } => {
+                self.buy_bundle(request_id, &msisdn, &bundle_id, beneficiary.as_ref(), now)
+            }
+            Op::RedeemVoucher { msisdn, pin } => self.redeem_voucher(request_id, &msisdn, &pin, now),
+            Op::ShareData { from, to, bytes } => self.share_data(request_id, &from, &to, bytes, now),
+            Op::RedeemPoints { msisdn, reward_id } => self.redeem_points(request_id, &msisdn, &reward_id, now),
             Op::Transfer { from, to, amount } => self.transfer(request_id, &from, &to, amount, now),
             Op::Borrow { msisdn, amount } => self.borrow(request_id, &msisdn, amount, now),
             Op::DataUsage { msisdn, bytes } => self.data_usage(request_id, &msisdn, bytes, now),
@@ -629,25 +788,19 @@ impl Network {
         Outcome { request_id: request_id.to_owned(), charged, balance: self.view(msisdn), detail }
     }
 
-    fn top_up(&mut self, id: &str, msisdn: &Msisdn, amount: Units, now: u64) -> Result<Outcome, RtnError> {
-        if !self.subscribers.contains_key(msisdn) {
-            return Err(RtnError::UnknownSubscriber);
-        }
-        if amount == 0 || amount > TOP_UP_MAX {
-            return Err(RtnError::InvalidAmount { reason: format!("a top-up is up to {}", format_naira(TOP_UP_MAX)) });
-        }
+    /// Adds airtime, earns points, and repays any loan from it. Returns what was repaid.
+    pub(crate) fn credit(&mut self, id: &str, msisdn: &Msisdn, amount: Units, note: String, now: u64) -> Units {
         self.touch(msisdn, now);
         self.account(msisdn).airtime += amount;
         self.totals.topped_up += amount;
+        let points = self.earn(msisdn, amount);
         self.post(
             id,
             msisdn,
             EntryKind::TopUp,
-            delta(amount),
-            0,
-            0,
+            Deltas { airtime: delta(amount), points, ..Deltas::default() },
             now,
-            format!("Top-up of {}", format_naira(amount)),
+            note,
         );
         let account = self.account(msisdn);
         let repaid = account.loan.min(account.available());
@@ -659,18 +812,64 @@ impl Network {
                 id,
                 msisdn,
                 EntryKind::LoanRepayment,
-                -delta(repaid),
-                0,
-                -delta(repaid),
+                Deltas { airtime: -delta(repaid), loan: -delta(repaid), ..Deltas::default() },
                 now,
                 "Airtime loan repaid".into(),
             );
         }
+        repaid
+    }
+
+    fn top_up(
+        &mut self,
+        id: &str,
+        msisdn: &Msisdn,
+        amount: Units,
+        via: Option<&str>,
+        now: u64,
+    ) -> Result<Outcome, RtnError> {
+        if !self.subscribers.contains_key(msisdn) {
+            return Err(RtnError::UnknownSubscriber);
+        }
+        if amount == 0 || amount > TOP_UP_MAX {
+            return Err(RtnError::InvalidAmount { reason: format!("a top-up is up to {}", format_naira(TOP_UP_MAX)) });
+        }
+        if via.is_some_and(|v| v.chars().count() > 60) {
+            return Err(RtnError::InvalidRequest { reason: "a channel is at most 60 characters".into() });
+        }
+        let note = match via {
+            Some(via) => format!("Top-up of {} by {via}", format_naira(amount)),
+            None => format!("Top-up of {}", format_naira(amount)),
+        };
+        let repaid = self.credit(id, msisdn, amount, note, now);
+        if let Some(via) = via {
+            let text = format!(
+                "Your line was recharged with {} by {via}. Airtime: {}.",
+                format_naira(amount),
+                format_naira(self.view(msisdn).airtime)
+            );
+            self.notify(msisdn, &text, now);
+        }
         Ok(self.outcome(id, msisdn, 0, Detail::TopUp { repaid }))
     }
 
-    fn buy_bundle(&mut self, id: &str, msisdn: &Msisdn, bundle_id: &str, now: u64) -> Result<Outcome, RtnError> {
+    fn buy_bundle(
+        &mut self,
+        id: &str,
+        msisdn: &Msisdn,
+        bundle_id: &str,
+        beneficiary: Option<&Msisdn>,
+        now: u64,
+    ) -> Result<Outcome, RtnError> {
         self.active(msisdn)?;
+        let receiver = match beneficiary {
+            Some(other) if other == msisdn => None,
+            Some(other) => {
+                self.active(other)?;
+                Some(other.clone())
+            }
+            None => None,
+        };
         let bundle = self.catalog.bundle(bundle_id).cloned().ok_or(RtnError::UnknownBundle)?;
         self.touch(msisdn, now);
         let account = self.account(msisdn);
@@ -679,24 +878,135 @@ impl Network {
         }
         let expires_at = now + u64::from(bundle.validity_days) * DAY_MS;
         account.airtime -= bundle.price;
-        account.bundles.push(HeldBundle {
+        self.totals.revenue += bundle.price;
+        let points = self.earn(msisdn, bundle.price);
+        let holder = receiver.clone().unwrap_or_else(|| msisdn.clone());
+        self.touch(&holder, now);
+        self.account(&holder).bundles.push(HeldBundle {
             bundle_id: bundle.id.clone(),
             name: bundle.name.clone(),
             bytes_left: bundle.data_bytes,
             expires_at,
         });
-        self.totals.revenue += bundle.price;
+        match &receiver {
+            None => {
+                self.post(
+                    id,
+                    msisdn,
+                    EntryKind::BundlePurchase,
+                    Deltas {
+                        airtime: -delta(bundle.price),
+                        data: delta(bundle.data_bytes),
+                        points,
+                        ..Deltas::default()
+                    },
+                    now,
+                    bundle.name.clone(),
+                );
+            }
+            Some(other) => {
+                self.post(
+                    id,
+                    msisdn,
+                    EntryKind::BundlePurchase,
+                    Deltas { airtime: -delta(bundle.price), points, ..Deltas::default() },
+                    now,
+                    format!("{} for {other}", bundle.name),
+                );
+                self.post(
+                    id,
+                    other,
+                    EntryKind::BundleReceived,
+                    Deltas::data(delta(bundle.data_bytes)),
+                    now,
+                    format!("{} from {msisdn}", bundle.name),
+                );
+                let text =
+                    format!("{msisdn} bought you {}. It is valid for {}.", bundle.name, days(bundle.validity_days));
+                self.notify(other, &text, now);
+            }
+        }
+        Ok(self.outcome(
+            id,
+            msisdn,
+            bundle.price,
+            Detail::Bundle { bundle_id: bundle.id, expires_at, beneficiary: receiver },
+        ))
+    }
+
+    fn share_data(&mut self, id: &str, from: &Msisdn, to: &Msisdn, bytes: u64, now: u64) -> Result<Outcome, RtnError> {
+        if from == to {
+            return Err(RtnError::SelfTransfer);
+        }
+        self.active(from)?;
+        self.active(to)?;
+        if !(SHARE_MIN..=SHARE_MAX).contains(&bytes) {
+            return Err(RtnError::InvalidAmount {
+                reason: format!("you can share {} to {}", format_bytes(SHARE_MIN), format_bytes(SHARE_MAX)),
+            });
+        }
+        self.touch(from, now);
+        self.touch(to, now);
+        let available = self.account(from).data_bytes();
+        if available < bytes {
+            return Err(RtnError::InsufficientData { needed: bytes, available });
+        }
+        let latest = self.account(from).draw_data(bytes);
+        self.post(
+            id,
+            from,
+            EntryKind::DataShareOut,
+            Deltas::data(-delta(bytes)),
+            now,
+            format!("Shared {} with {to}", format_bytes(bytes)),
+        );
+        self.account(to).bundles.push(HeldBundle {
+            bundle_id: "shared".into(),
+            name: format!("Data from {from}"),
+            bytes_left: bytes,
+            expires_at: latest.max(now + DAY_MS),
+        });
+        self.post(
+            id,
+            to,
+            EntryKind::DataShareIn,
+            Deltas::data(delta(bytes)),
+            now,
+            format!("{} from {from}", format_bytes(bytes)),
+        );
+        self.notify(to, &format!("{from} shared {} of data with you.", format_bytes(bytes)), now);
+        Ok(self.outcome(id, from, 0, Detail::Share { to: to.clone(), bytes }))
+    }
+
+    fn redeem_points(&mut self, id: &str, msisdn: &Msisdn, reward_id: &str, now: u64) -> Result<Outcome, RtnError> {
+        self.active(msisdn)?;
+        let reward = self.catalog.reward(reward_id).cloned().ok_or(RtnError::UnknownReward)?;
+        self.touch(msisdn, now);
+        let account = self.account(msisdn);
+        if account.points < reward.points {
+            return Err(RtnError::InsufficientPoints { needed: reward.points, available: account.points });
+        }
+        account.points -= reward.points;
+        account.bundles.push(HeldBundle {
+            bundle_id: reward.id.clone(),
+            name: reward.name.clone(),
+            bytes_left: reward.data_bytes,
+            expires_at: now + u64::from(reward.validity_days) * DAY_MS,
+        });
         self.post(
             id,
             msisdn,
-            EntryKind::BundlePurchase,
-            -delta(bundle.price),
-            delta(bundle.data_bytes),
-            0,
+            EntryKind::RewardRedeemed,
+            Deltas { data: delta(reward.data_bytes), points: -delta(reward.points), ..Deltas::default() },
             now,
-            bundle.name.clone(),
+            format!("{} for {} points", reward.name, reward.points),
         );
-        Ok(self.outcome(id, msisdn, bundle.price, Detail::Bundle { bundle_id: bundle.id, expires_at }))
+        Ok(self.outcome(
+            id,
+            msisdn,
+            0,
+            Detail::Reward { reward_id: reward.id, data_bytes: reward.data_bytes, points: reward.points },
+        ))
     }
 
     fn transfer(&mut self, id: &str, from: &Msisdn, to: &Msisdn, amount: Units, now: u64) -> Result<Outcome, RtnError> {
@@ -725,9 +1035,7 @@ impl Network {
             id,
             from,
             EntryKind::TransferOut,
-            -delta(needed),
-            0,
-            0,
+            Deltas::airtime(-delta(needed)),
             now,
             format!("Sent {} to {to}", format_naira(amount)),
         );
@@ -736,13 +1044,17 @@ impl Network {
             id,
             to,
             EntryKind::TransferIn,
-            delta(amount),
-            0,
-            0,
+            Deltas::airtime(delta(amount)),
             now,
             format!("Received {} from {from}", format_naira(amount)),
         );
         self.totals.revenue += TRANSFER_FEE;
+        let text = format!(
+            "You have received {} airtime from {from}. Airtime: {}.",
+            format_naira(amount),
+            format_naira(self.view(to).airtime)
+        );
+        self.notify(to, &text, now);
         Ok(self.outcome(id, from, TRANSFER_FEE, Detail::Transfer { to: to.clone(), amount, fee: TRANSFER_FEE }))
     }
 
@@ -767,9 +1079,7 @@ impl Network {
             id,
             msisdn,
             EntryKind::Loan,
-            delta(amount),
-            0,
-            delta(owed),
+            Deltas { airtime: delta(amount), loan: delta(owed), ..Deltas::default() },
             now,
             format!("Borrowed {}", format_naira(amount)),
         );
@@ -793,23 +1103,14 @@ impl Network {
         if cost > account.available() {
             return Err(RtnError::InsufficientFunds { needed: cost, available: account.available() });
         }
-        account.bundles.sort_by_key(|b| b.expires_at);
-        let mut left = from_bundle;
-        for bundle in &mut account.bundles {
-            let take = left.min(bundle.bytes_left);
-            bundle.bytes_left -= take;
-            left -= take;
-        }
-        account.bundles.retain(|b| b.bytes_left > 0);
+        account.draw_data(from_bundle);
         account.airtime -= cost;
         self.totals.revenue += cost;
         self.post(
             id,
             msisdn,
             EntryKind::Data,
-            -delta(cost),
-            -delta(from_bundle),
-            0,
+            Deltas { airtime: -delta(cost), data: -delta(from_bundle), ..Deltas::default() },
             now,
             format!("{} of data", format_bytes(bytes)),
         );
@@ -855,9 +1156,7 @@ impl Network {
             id,
             &session.msisdn,
             EntryKind::Voice,
-            -delta(cost),
-            0,
-            0,
+            Deltas::airtime(-delta(cost)),
             now,
             format!("Call to {}, {billed_seconds}s", session.callee),
         );
@@ -895,8 +1194,24 @@ impl Network {
         account.airtime -= cost;
         self.totals.revenue += cost;
         let plural = if parts == 1 { "" } else { "s" };
-        self.post(id, from, EntryKind::Sms, -delta(cost), 0, 0, now, format!("SMS to {to}, {parts} part{plural}"));
+        self.post(
+            id,
+            from,
+            EntryKind::Sms,
+            Deltas::airtime(-delta(cost)),
+            now,
+            format!("SMS to {to}, {parts} part{plural}"),
+        );
         let message_id = self.smsc.submit(from, to, text, parts, now);
         Ok(self.outcome(id, from, cost, Detail::Sms { message_id, segments: parts }))
+    }
+}
+
+/// "1 day", "7 days".
+pub(crate) fn days(count: u32) -> String {
+    if count == 1 {
+        "1 day".into()
+    } else {
+        format!("{count} days")
     }
 }

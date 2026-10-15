@@ -49,6 +49,24 @@ pub enum RtnError {
     PinLocked { seconds: u64 },
     #[error("that request id was already used for a different operation")]
     RequestConflict,
+    #[error("that code is not right")]
+    WrongCode,
+    #[error("that code has expired; ask for a new one")]
+    CodeExpired,
+    #[error("wait {seconds} seconds before asking again")]
+    TooSoon { seconds: u64 },
+    #[error("that voucher PIN is not valid")]
+    UnknownVoucher,
+    #[error("that voucher has already been used")]
+    VoucherUsed,
+    #[error("too many wrong voucher PINs; try again in {} minutes", seconds.div_ceil(60))]
+    VoucherLocked { seconds: u64 },
+    #[error("not enough data: {} needed, {} available", crate::network::format_bytes(*needed), crate::network::format_bytes(*available))]
+    InsufficientData { needed: u64, available: u64 },
+    #[error("not enough points: {needed} needed, {available} available")]
+    InsufficientPoints { needed: u64, available: u64 },
+    #[error("no reward has that id")]
+    UnknownReward,
 }
 
 impl RtnError {
@@ -75,6 +93,15 @@ impl RtnError {
             Self::WrongPin => "wrong_pin",
             Self::PinLocked { .. } => "pin_locked",
             Self::RequestConflict => "request_conflict",
+            Self::WrongCode => "wrong_code",
+            Self::CodeExpired => "code_expired",
+            Self::TooSoon { .. } => "too_soon",
+            Self::UnknownVoucher => "unknown_voucher",
+            Self::VoucherUsed => "voucher_used",
+            Self::VoucherLocked { .. } => "voucher_locked",
+            Self::InsufficientData { .. } => "insufficient_data",
+            Self::InsufficientPoints { .. } => "insufficient_points",
+            Self::UnknownReward => "unknown_reward",
         }
     }
 }

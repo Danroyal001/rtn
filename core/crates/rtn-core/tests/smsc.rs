@@ -72,7 +72,7 @@ fn refuses_empty_too_long_and_unaffordable_messages() {
         net.apply("a", Op::SmsSubmit { from: msisdn(1), to: msisdn(2), text: "hi".into() }, T0),
         Err(RtnError::InsufficientFunds { .. })
     ));
-    net.apply("t", Op::TopUp { msisdn: msisdn(1), amount: 100_000 }, T0).unwrap();
+    net.apply("t", Op::TopUp { msisdn: msisdn(1), amount: 100_000, via: None }, T0).unwrap();
     assert!(matches!(
         net.apply("b", Op::SmsSubmit { from: msisdn(1), to: msisdn(2), text: String::new() }, T0),
         Err(RtnError::InvalidMessage { .. })

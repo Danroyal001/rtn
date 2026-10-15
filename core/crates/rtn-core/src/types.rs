@@ -54,7 +54,20 @@ impl Msisdn {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+
+    /// The number RTN's own messages come from: sign-in codes, receipts and alerts. It is the
+    /// first number of RTN's range and is never given to a subscriber.
+    pub fn service() -> Self {
+        Self(SERVICE_NUMBER.to_owned())
+    }
+
+    pub fn is_service(&self) -> bool {
+        self.0 == SERVICE_NUMBER
+    }
 }
+
+/// See [`Msisdn::service`].
+pub const SERVICE_NUMBER: &str = "2349990000000";
 
 impl fmt::Display for Msisdn {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

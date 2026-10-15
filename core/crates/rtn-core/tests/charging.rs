@@ -5,7 +5,7 @@ use support::*;
 #[test]
 fn top_up_adds_airtime_and_writes_the_ledger() {
     let mut net = network_with(1, 0);
-    let out = net.apply("t1", Op::TopUp { msisdn: msisdn(1), amount: 50_000 }, T0).unwrap();
+    let out = net.apply("t1", Op::TopUp { msisdn: msisdn(1), amount: 50_000, via: None }, T0).unwrap();
     assert_eq!(out.balance.airtime, 50_000);
     let history = net.history(&msisdn(1));
     assert_eq!(history.len(), 1);
@@ -16,8 +16,12 @@ fn top_up_adds_airtime_and_writes_the_ledger() {
 #[test]
 fn replaying_a_request_returns_the_first_result_and_charges_once() {
     let mut net = network_with(1, 100_000);
-    let first = net.apply("b1", Op::BuyBundle { msisdn: msisdn(1), bundle_id: "daily-100mb".into() }, T0).unwrap();
-    let again = net.apply("b1", Op::BuyBundle { msisdn: msisdn(1), bundle_id: "daily-100mb".into() }, T0 + 9).unwrap();
+    let first = net
+        .apply("b1", Op::BuyBundle { msisdn: msisdn(1), bundle_id: "daily-100mb".into(), beneficiary: None }, T0)
+        .unwrap();
+    let again = net
+        .apply("b1", Op::BuyBundle { msisdn: msisdn(1), bundle_id: "daily-100mb".into(), beneficiary: None }, T0 + 9)
+        .unwrap();
     assert_eq!(first, again);
     assert_eq!(net.balance(&msisdn(1), T0).unwrap().airtime, 100_000 - 10_000);
 }
@@ -25,15 +29,16 @@ fn replaying_a_request_returns_the_first_result_and_charges_once() {
 #[test]
 fn reusing_a_request_id_for_a_different_operation_is_refused() {
     let mut net = network_with(1, 100_000);
-    net.apply("x", Op::TopUp { msisdn: msisdn(1), amount: 1 }, T0).unwrap();
-    let other = net.apply("x", Op::TopUp { msisdn: msisdn(1), amount: 2 }, T0);
+    net.apply("x", Op::TopUp { msisdn: msisdn(1), amount: 1, via: None }, T0).unwrap();
+    let other = net.apply("x", Op::TopUp { msisdn: msisdn(1), amount: 2, via: None }, T0);
     assert!(matches!(other, Err(RtnError::RequestConflict)));
 }
 
 #[test]
 fn bundles_are_bought_from_airtime_and_used_before_airtime() {
     let mut net = network_with(1, 100_000);
-    net.apply("b", Op::BuyBundle { msisdn: msisdn(1), bundle_id: "daily-100mb".into() }, T0).unwrap();
+    net.apply("b", Op::BuyBundle { msisdn: msisdn(1), bundle_id: "daily-100mb".into(), beneficiary: None }, T0)
+        .unwrap();
     let out = net.apply("d", Op::DataUsage { msisdn: msisdn(1), bytes: 40 * MB }, T0).unwrap();
     assert_eq!(out.charged, 0);
     assert_eq!(out.balance.data_bytes, 60 * MB);
@@ -56,7 +61,8 @@ fn data_that_cannot_be_paid_for_changes_nothing() {
 #[test]
 fn bundles_expire_with_a_ledger_entry() {
     let mut net = network_with(1, 100_000);
-    net.apply("b", Op::BuyBundle { msisdn: msisdn(1), bundle_id: "daily-100mb".into() }, T0).unwrap();
+    net.apply("b", Op::BuyBundle { msisdn: msisdn(1), bundle_id: "daily-100mb".into(), beneficiary: None }, T0)
+        .unwrap();
     let later = T0 + 24 * 3_600_000 + 1;
     assert_eq!(net.balance(&msisdn(1), later).unwrap().data_bytes, 0);
     assert_eq!(net.history(&msisdn(1)).last().unwrap().kind, EntryKind::BundleExpired);
@@ -92,7 +98,8 @@ fn a_call_is_cut_at_its_grant() {
 fn reserved_airtime_cannot_be_spent_twice() {
     let mut net = network_with(2, 1_000);
     net.apply("c", Op::VoiceStart { msisdn: msisdn(1), callee: "x".into() }, T0).unwrap();
-    let out = net.apply("b", Op::BuyBundle { msisdn: msisdn(1), bundle_id: "daily-100mb".into() }, T0);
+    let out =
+        net.apply("b", Op::BuyBundle { msisdn: msisdn(1), bundle_id: "daily-100mb".into(), beneficiary: None }, T0);
     assert!(matches!(out, Err(RtnError::InsufficientFunds { .. })));
 }
 
@@ -123,7 +130,7 @@ fn borrowing_lends_airtime_and_the_next_top_up_repays_it_with_a_fee() {
         net.apply("loan2", Op::Borrow { msisdn: msisdn(1), amount: 1_000 }, T0),
         Err(RtnError::LoanOutstanding { .. })
     ));
-    let out = net.apply("top", Op::TopUp { msisdn: msisdn(1), amount: 50_000 }, T0).unwrap();
+    let out = net.apply("top", Op::TopUp { msisdn: msisdn(1), amount: 50_000, via: None }, T0).unwrap();
     assert_eq!(out.balance.loan, 0);
     assert_eq!(out.balance.airtime, 20_000 + 50_000 - 22_000);
     let kinds: Vec<EntryKind> = net.history(&msisdn(1)).iter().map(|e| e.kind).collect();
@@ -144,11 +151,11 @@ fn borrowing_above_the_limit_is_refused() {
 fn unknown_things_are_named() {
     let mut net = network_with(1, 100_000);
     assert!(matches!(
-        net.apply("u", Op::TopUp { msisdn: msisdn(77), amount: 1 }, T0),
+        net.apply("u", Op::TopUp { msisdn: msisdn(77), amount: 1, via: None }, T0),
         Err(RtnError::UnknownSubscriber)
     ));
     assert!(matches!(
-        net.apply("b", Op::BuyBundle { msisdn: msisdn(1), bundle_id: "nope".into() }, T0),
+        net.apply("b", Op::BuyBundle { msisdn: msisdn(1), bundle_id: "nope".into(), beneficiary: None }, T0),
         Err(RtnError::UnknownBundle)
     ));
     assert!(matches!(

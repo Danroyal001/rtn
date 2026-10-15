@@ -6,7 +6,7 @@ use crate::network::{Detail, Network, Op, Status};
 use crate::types::{Msisdn, MB};
 
 /// SplitMix64: small, fast, and the same sequence on every platform and every version.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Rng(u64);
 
 impl Rng {
@@ -66,7 +66,7 @@ pub struct TickReport {
     pub refused: u32,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct Call {
     session_id: String,
     msisdn: Msisdn,
@@ -76,7 +76,7 @@ struct Call {
 
 /// Generates traffic for every active subscriber. Two simulators with the same seed, run against
 /// the same network, produce the same ledger.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Simulator {
     rng: Rng,
     seed: u64,
@@ -177,7 +177,7 @@ impl Simulator {
             let amount = self.rng.range(1, 21) * 10_000;
             let id = self.next_id("topup");
             count(
-                net.apply(&id, Op::TopUp { msisdn: msisdn.clone(), amount }, now),
+                net.apply(&id, Op::TopUp { msisdn: msisdn.clone(), amount, via: None }, now),
                 &mut report.top_ups,
                 &mut report.refused,
             );
@@ -187,7 +187,7 @@ impl Simulator {
             let bundle_id = bundles[self.rng.range(0, bundles.len() as u64) as usize].id.clone();
             let id = self.next_id("bundle");
             count(
-                net.apply(&id, Op::BuyBundle { msisdn: msisdn.clone(), bundle_id }, now),
+                net.apply(&id, Op::BuyBundle { msisdn: msisdn.clone(), bundle_id, beneficiary: None }, now),
                 &mut report.bundles_bought,
                 &mut report.refused,
             );

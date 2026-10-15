@@ -77,6 +77,9 @@ pub struct SmsMessage {
     pub attempts: u32,
     pub next_attempt_at: u64,
     pub finished_at: Option<u64>,
+    /// Whether the recipient has opened it in the app.
+    #[serde(default)]
+    pub read: bool,
 }
 
 /// Told to the sender when a message is delivered or given up on.
@@ -134,6 +137,7 @@ impl Smsc {
                 attempts: 0,
                 next_attempt_at: now,
                 finished_at: None,
+                read: false,
             },
         );
         self.queued.insert(id.clone());
@@ -249,6 +253,28 @@ impl Network {
 
     pub fn queued_sms(&self) -> usize {
         self.smsc.queued_len()
+    }
+
+    /// The most recent messages across the whole SMS centre, newest first.
+    pub fn sms_log(&self, limit: usize) -> Vec<&SmsMessage> {
+        let mut all: Vec<&SmsMessage> = self.smsc.messages.values().collect();
+        all.sort_by(|a, b| b.submitted_at.cmp(&a.submitted_at).then_with(|| b.id.cmp(&a.id)));
+        all.truncate(limit);
+        all
+    }
+
+    /// Marks messages delivered to `msisdn` as read. Returns how many it marked.
+    pub fn mark_read(&mut self, msisdn: &Msisdn, ids: &[String]) -> usize {
+        let mut marked = 0;
+        for id in ids {
+            if let Some(message) = self.smsc.messages.get_mut(id) {
+                if message.to == *msisdn && message.state == SmsState::Delivered && !message.read {
+                    message.read = true;
+                    marked += 1;
+                }
+            }
+        }
+        marked
     }
 }
 

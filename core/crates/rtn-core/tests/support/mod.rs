@@ -24,7 +24,7 @@ pub fn network_with(count: u32, airtime: u64) -> Network {
         )
         .unwrap();
         if airtime > 0 {
-            net.apply(&format!("seed-{n}"), Op::TopUp { msisdn: msisdn(n), amount: airtime }, T0).unwrap();
+            net.apply(&format!("seed-{n}"), Op::TopUp { msisdn: msisdn(n), amount: airtime, via: None }, T0).unwrap();
         }
     }
     net

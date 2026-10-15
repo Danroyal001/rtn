@@ -5,7 +5,8 @@ use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
 use rtn_api::{router, run_background, system_clock, AppState, Config};
-use rtn_core::{format_naira, seed, Network};
+use rtn_core::node::Node;
+use rtn_core::{format_naira, Msisdn};
 use serde_json::{json, Value};
 
 #[derive(Parser)]
@@ -27,17 +28,16 @@ enum Command {
     Serve {
         #[arg(long, env = "RTN_ADDR", default_value = "127.0.0.1:8700")]
         addr: String,
-        /// Keep the network in this file: loaded at start, saved on shutdown and on request.
-        #[arg(long, env = "RTN_STATE")]
-        state: Option<PathBuf>,
+        /// Keep the network in this directory: a journal of every change, written before it is
+        /// answered, and a snapshot. Without it the network lives in memory only.
+        #[arg(long, env = "RTN_DATA")]
+        data: Option<PathBuf>,
         /// Add this many demo subscribers when the network starts empty.
         #[arg(long, default_value_t = 0)]
         seed: u32,
         /// Start the traffic simulator.
         #[arg(long)]
         simulate: bool,
-        #[arg(long, default_value_t = 42)]
-        simulator_seed: u64,
     },
     /// Add demo subscribers to a running network.
     Seed {
@@ -90,7 +90,17 @@ enum Command {
     Sms { from: String, to: String, text: String },
     /// Live traffic and money totals.
     Traffic,
-    /// Save the network to its state file now.
+    /// Print recharge vouchers.
+    Vouchers {
+        #[arg(long, default_value_t = 5)]
+        count: u32,
+        /// Each voucher's value, in naira.
+        #[arg(long, default_value = "500")]
+        naira: String,
+    },
+    /// The messages delivered to a number, newest first (sign-in codes arrive here).
+    Inbox { msisdn: String },
+    /// Write a snapshot and empty the journal now.
     Snapshot,
 }
 
@@ -147,33 +157,30 @@ fn print_json(value: &Value) {
 
 async fn serve(
     addr: String,
-    state: Option<PathBuf>,
+    data: Option<PathBuf>,
     seed_count: u32,
     simulate: bool,
-    simulator_seed: u64,
     token: String,
 ) -> Result<(), String> {
-    let mut net = match &state {
-        Some(path) if path.exists() => {
-            let text = std::fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-            Network::from_json(&text).map_err(|e| format!("{} is not an RTN state file: {e}", path.display()))?
-        }
-        _ => Network::new(),
+    let node = match &data {
+        Some(dir) => Node::open(dir).map_err(|e| format!("cannot open {}: {e}", dir.display()))?,
+        None => Node::in_memory(),
     };
-    if seed_count > 0 && net.subscribers().next().is_none() {
-        let seeded = seed::populate(&mut net, seed_count, 1, now_ms()).map_err(|e| e.to_string())?;
-        eprintln!("rtn: seeded {} subscribers; sign in as any of these with PIN 1234:", seeded.len());
-        for s in seeded.iter().take(5) {
-            eprintln!("       {}  {}", s.msisdn, s.name);
-        }
-    }
+    let empty = node.network().subscribers().next().is_none();
     if token.is_empty() {
         eprintln!("rtn: no RTN_ADMIN_TOKEN set; the admin routes are closed");
     }
-    let app_state = AppState::new(
-        net,
-        Config { admin_token: token, state_path: state, clock: system_clock(), simulate, simulator_seed },
-    );
+    let app_state = AppState::new(node, Config { admin_token: token, clock: system_clock(), simulate });
+    if seed_count > 0 && empty {
+        let seeded = app_state
+            .run(json!({ "method": "seed", "count": seed_count, "seed": 1, "now": now_ms() }))
+            .map_err(|e| e.to_string())?;
+        let seeded = seeded.as_array().cloned().unwrap_or_default();
+        eprintln!("rtn: seeded {} subscribers; sign in as any of these with PIN 1234:", seeded.len());
+        for s in seeded.iter().take(5) {
+            eprintln!("       {}  {}", s["msisdn"].as_str().unwrap_or(""), s["name"].as_str().unwrap_or(""));
+        }
+    }
     let listener = tokio::net::TcpListener::bind(&addr).await.map_err(|e| format!("cannot listen on {addr}: {e}"))?;
     eprintln!("rtn: listening on http://{addr}{}", if simulate { " with the traffic simulator on" } else { "" });
     let background = tokio::spawn(run_background(app_state.clone()));
@@ -192,8 +199,9 @@ async fn serve(
         .await
         .map_err(|e| e.to_string())?;
     background.abort();
-    if let Some(path) = app_state.save().map_err(|e| format!("could not save the state: {e}"))? {
-        eprintln!("rtn: saved the network to {}", path.display());
+    if let Some(dir) = &data {
+        app_state.compact().map_err(|e| format!("could not write the snapshot: {e}"))?;
+        eprintln!("rtn: wrote a snapshot to {}", dir.display());
     }
     Ok(())
 }
@@ -225,9 +233,9 @@ fn ussd_session(client: &Client, msisdn: &str, code: &str) -> Result<(), String>
 fn run(cli: Cli) -> Result<(), String> {
     let client = Client::new(&cli.api, &cli.token);
     match cli.command {
-        Command::Serve { addr, state, seed, simulate, simulator_seed } => {
+        Command::Serve { addr, data, seed, simulate } => {
             let runtime = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
-            runtime.block_on(serve(addr, state, seed, simulate, simulator_seed, cli.token))
+            runtime.block_on(serve(addr, data, seed, simulate, cli.token))
         }
         Command::Seed { count, seed } => {
             let seeded = client.send("POST", "/v1/admin/seed", Some(json!({ "count": count, "seed": seed })))?;
@@ -321,6 +329,32 @@ fn run(cli: Cli) -> Result<(), String> {
         }
         Command::Traffic => {
             print_json(&client.send("GET", "/v1/admin/traffic", None)?);
+            Ok(())
+        }
+        Command::Vouchers { count, naira } => {
+            let amount = naira_to_units(&naira)?;
+            let batch = client.send("POST", "/v1/admin/vouchers", Some(json!({ "count": count, "amount": amount })))?;
+            println!("{:<14} {:<19} {:>12}", "SERIAL", "PIN", "VALUE");
+            for v in batch.as_array().into_iter().flatten() {
+                let pin = v["pin"].as_str().unwrap_or("");
+                let grouped: Vec<&str> = (0..pin.len()).step_by(4).map(|i| &pin[i..(i + 4).min(pin.len())]).collect();
+                println!(
+                    "{:<14} {:<19} {:>12}",
+                    v["serial"].as_str().unwrap_or(""),
+                    grouped.join(" "),
+                    format_naira(v["amount"].as_u64().unwrap_or(0))
+                );
+            }
+            Ok(())
+        }
+        Command::Inbox { msisdn } => {
+            let msisdn = Msisdn::parse(&msisdn).map_err(|e| e.to_string())?;
+            let inbox = client.send("POST", "/v1/admin/rpc", Some(json!({ "method": "inbox", "msisdn": msisdn })))?;
+            for m in inbox.as_array().into_iter().flatten().rev().take(20) {
+                let from = m["from"].as_str().unwrap_or("");
+                let from = if from == rtn_core::SERVICE_NUMBER { "RTN" } else { from };
+                println!("{from:<15} {}", m["text"].as_str().unwrap_or(""));
+            }
             Ok(())
         }
         Command::Snapshot => {

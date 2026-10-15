@@ -94,5 +94,25 @@ fn my_number_and_unknown_subscriber() {
     let reply = dial(&mut net, "s", "*123*5#");
     assert!(reply.text.contains(&msisdn(1).to_string()));
     assert!(net.ussd("z", &msisdn(55), "*123#", T0).is_err());
-    let _ = Op::TopUp { msisdn: msisdn(1), amount: 1 };
+    let _ = Op::TopUp { msisdn: msisdn(1), amount: 1, via: None };
+}
+
+#[test]
+fn a_voucher_recharges_from_the_shortcut() {
+    let mut net = network_with(1, 0);
+    let pin = net.issue_vouchers(1, 20_000, 3, T0).unwrap()[0].pin.clone();
+    let reply = dial(&mut net, "v1", &format!("*555*{pin}#"));
+    assert!(reply.end);
+    assert!(reply.text.contains("₦200.00"), "{}", reply.text);
+    let again = dial(&mut net, "v2", &format!("*555*{pin}#"));
+    assert!(again.text.contains("already been used"), "{}", again.text);
+}
+
+#[test]
+fn points_from_the_menu() {
+    let mut net = network_with(1, 500_000);
+    dial(&mut net, "p", "*123#");
+    let reply = dial(&mut net, "p", "6");
+    assert!(reply.end);
+    assert!(reply.text.contains("500 points"), "{}", reply.text);
 }
