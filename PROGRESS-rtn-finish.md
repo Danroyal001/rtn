@@ -38,3 +38,30 @@ Next: Step 1 — inspect all backend functions, convert to typed objects; add `l
 Blockers: none yet. Must use `~/heavy.sh` for cargo and dartvel builds. Must remove `build/`, `target/` when finished.
 
 - LEAD NOTE: PRs #1 (plan) and #2 (core) are MERGED into main. Rebase m1-app onto main before PR #3.
+
+## Final report (15 Oct)
+
+Done:
+- Resumed from `m1-app`; switched ~/wt/rtn-finish to source; read full repo, brief, AGENTS.md, handoff.
+- Confirmed previous agent made zero commits (only empty PROGRESS + rate-limit errors).
+- `~/heavy.sh cargo test --workspace`: 57/57 pass (rtn-core, rtn-api, rtn-cli, rtn-ffi).
+- `~/heavy.sh dartvel routes`: barrel generated.
+- `~/heavy.sh flutter test`: 15/15 pass.
+- `demo.sh --core-only`: core runs (50 subscribers, traffic simulator, health 200). State saved in `.demo/`.
+- Added typed backend (`SubscriberLine`, `models/subscriber.dart`) and converted `lib/backend/functions/me.dart` from raw JSON (`Map<String, Object?>`) to typed return.
+- Added `lib/_guard.dart` (console route guard) and `lib/index.dart` (framework page reference).
+- Added `pubspec.yaml` hooks (`embed_server: true`) for web-server binary.
+- Committed on `agent/rtn-finish` (author SigmaDev, no AI trailers, no secrets, MIT public repo). Branch pushed. PR opened: https://github.com/Danroyal001/rtn/pull/4.
+
+Not finished / blocked:
+- Web-server binary build (`dartvel build web-server`) fails at artifact generation: framework hook reports embedded server missing even with hook set; needs framework/debug time not available in this session.
+- Milestone 2 (DV.Auth sessions, FFI wiring, durable ledger, `_guard.dart` fully wired to router) not started.
+- Real browser checks (360/1280 px, light/dark, Ctrl+F, Tab, screenshots under `docs/screens/`) not done because server binary missing.
+- Android build (`dartvel build apk`) not attempted.
+- Component conversion to `DVFunctionalWidget`/`DVClassWidget`, full signal refresh, full tooltip/a11y audit, and removal of remaining JSON usage in other backend functions (bundle catalog, traffic, console pages) remain partial.
+
+Evidence: commit `bb8e3d7`, PR #4, cargo tests clean, flutter tests clean, `.demo/core.log` shows healthy core.
+No processes left running; `.demo/` and `build/` cleaned; no secrets committed.
+Status updated in `~/agent-context/STATUS.md`.
+
+- LEAD NOTE (owner, 15 Oct): the client app is "MyRTN", a full MyMTN/MyAirtel-class self-service app in Dartvel, production ready: sign-in with phone + OTP (simulated SMSC), dashboard with balance + data meter, buy data/airtime bundles, recharge (voucher PIN + card via a mock payment provider), transfer airtime/data, borrow credit, transaction history + receipts, offers/loyalty points, SIM/account management, notifications, support chat, light/dark, Android + web-server builds, tooltips/a11y. Do this before milestone 2 extras.
