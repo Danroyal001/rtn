@@ -1,12 +1,9 @@
-// POST /api/console/subscriber: one line, its balances and recent history.
+// POST /api/console/subscriber: One subscriber's file.
 import 'package:dartvel_core/dartvel.dart';
 
-import '../../core.dart';
+import '../../../server/console.dart';
+import '../../../services/wire.dart';
 
-@DVBackendFunction()
-Future<Map<String, Object?>> _consoleSubscriber(String session, String msisdn) =>
-    asConsole(
-      session,
-      () => callCore('GET', '/v1/admin/subscribers/${Uri.encodeComponent(msisdn)}',
-          asOperator: true),
-    );
+@DVBackendFunction(policy: 'OperatorConsole.view')
+Future<Reply<SubscriberFile>> _consoleSubscriber(DVContext ctx, String msisdn) =>
+    Console.shared.subscriber(msisdn);

@@ -5,10 +5,10 @@ build/
 .flutter-plugins
 .flutter-plugins-dependencies
 
-# Ephemeral native platform folders (generated at build time)
+# Ephemeral native platform folders (generated at build time). web/ is kept:
+# it carries MyRTN's manifest, icons and a bootstrap that serves CanvasKit locally.
 android/
 ios/
-web/
 linux/
 windows/
 macos/
@@ -37,3 +37,4 @@ Thumbs.db
 /.dartvel/
 /.dart_tool/dartvel_backend.g.dart
 /.dart_tool/dartvel_backend_routes.g.dart
+.metadata

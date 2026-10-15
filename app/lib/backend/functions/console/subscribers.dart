@@ -1,19 +1,9 @@
-// POST /api/console/subscribers: search and page through subscribers.
+// POST /api/console/subscribers: Searches and pages through subscribers.
 import 'package:dartvel_core/dartvel.dart';
 
-import '../../core.dart';
+import '../../../server/console.dart';
+import '../../../services/wire.dart';
 
-@DVBackendFunction()
-Future<Map<String, Object?>> _consoleSubscribers(
-  String session,
-  String search,
-  int offset,
-) =>
-    asConsole(session, () {
-      final String query = Uri(queryParameters: <String, String>{
-        'q': search,
-        'offset': '$offset',
-        'limit': '25',
-      }).query;
-      return callCore('GET', '/v1/admin/subscribers?$query', asOperator: true);
-    });
+@DVBackendFunction(policy: 'OperatorConsole.view')
+Future<Reply<SubscriberPage>> _consoleSubscribers(DVContext ctx, String search, int offset) =>
+    Console.shared.subscribers(search, offset);

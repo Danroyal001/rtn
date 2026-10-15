@@ -1,29 +1,17 @@
-// POST /api/console/save_bundle: add a data bundle or change one.
+// POST /api/console/save_bundle: Adds or changes a data bundle.
 import 'package:dartvel_core/dartvel.dart';
 
-import '../../core.dart';
+import '../../../server/console.dart';
+import '../../../services/wire.dart';
 
-@DVBackendFunction()
-Future<Map<String, Object?>> _consoleSaveBundle(
-  String session,
+@DVBackendFunction(policy: 'OperatorConsole.update')
+Future<Reply<Done>> _consoleSaveBundle(
+  DVContext ctx,
   String id,
   String name,
-  int dataMb,
-  String priceNaira,
-  int validityDays,
+  String megabytes,
+  String price,
+  String validityDays,
+  String offer,
 ) =>
-    asConsole(session, () async {
-      final int? price = nairaToUnits(priceNaira);
-      if (price == null) {
-        return failure('invalid_amount', 'Enter the price in naira, like 500.');
-      }
-      return callCore('PUT', '/v1/admin/bundles/${Uri.encodeComponent(id.trim())}',
-          asOperator: true,
-          body: <String, Object?>{
-            'id': id.trim(),
-            'name': name.trim(),
-            'data_bytes': dataMb * 1048576,
-            'price': price,
-            'validity_days': validityDays,
-          });
-    });
+    Console.shared.saveBundle(id, name, megabytes, price, validityDays, offer);

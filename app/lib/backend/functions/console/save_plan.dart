@@ -1,31 +1,16 @@
-// POST /api/console/save_plan: add a rating plan or change one.
+// POST /api/console/save_plan: Adds or changes a rating plan.
 import 'package:dartvel_core/dartvel.dart';
 
-import '../../core.dart';
+import '../../../server/console.dart';
+import '../../../services/wire.dart';
 
-@DVBackendFunction()
-Future<Map<String, Object?>> _consoleSavePlan(
-  String session,
+@DVBackendFunction(policy: 'OperatorConsole.update')
+Future<Reply<Done>> _consoleSavePlan(
+  DVContext ctx,
   String id,
   String name,
-  String voiceKoboPerSecond,
-  String smsNaira,
-  String dataNairaPerMb,
+  String voicePerSecond,
+  String smsPerSegment,
+  String dataPerMb,
 ) =>
-    asConsole(session, () async {
-      final int? voice = int.tryParse(voiceKoboPerSecond.trim());
-      final int? sms = nairaToUnits(smsNaira);
-      final int? data = nairaToUnits(dataNairaPerMb);
-      if (voice == null || sms == null || data == null) {
-        return failure('invalid_amount', 'Every rate needs a number.');
-      }
-      return callCore('PUT', '/v1/admin/plans/${Uri.encodeComponent(id.trim())}',
-          asOperator: true,
-          body: <String, Object?>{
-            'id': id.trim(),
-            'name': name.trim(),
-            'voice_per_second': voice,
-            'sms_per_segment': sms,
-            'data_per_mb': data,
-          });
-    });
+    Console.shared.savePlan(id, name, voicePerSecond, smsPerSegment, dataPerMb);

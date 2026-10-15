@@ -1,603 +1,604 @@
-// The operator's console: sign-in, live traffic, subscribers, rating plans.
+// The operator console: the network live, subscribers, the catalogue,
+// vouchers, care and the SMS centre.
 import 'package:flutter/material.dart';
 
 import '../dartvel_client/dartvel_client.dart';
-import '../services/rtn.dart';
-import '../services/session.dart';
-import 'loaded.dart';
-import 'traffic_chart.dart';
-import 'ui.dart';
+import '../services/account.dart';
+import '../services/money.dart';
+import '../services/remote.dart';
+import '../services/wire.dart';
+import '../styles/theme.dart';
 
-/// Calls the backend as the signed-in operator; an expired session signs out.
-Future<RtnResult> asConsole(Future<Map<String, Object?>> Function(String session) call) async {
-  final ConsoleSession console = DV.global<ConsoleSession>();
-  final RtnResult result = await rtnCall(() => call(console.session));
-  if (result.code == 'console_signed_out') DV.global<ConsoleSession>(const ConsoleSession());
-  return result;
-}
+@DVFunctionalWidget()
+Widget _consoleSignInScreen(BuildContext context) {
+  final DVSignal<String> password = context.signal('');
+  final DVSignal<bool> busy = context.signal(false);
+  final DVSignal<String> problem = context.signal('');
 
-/// The console's own links, under the page heading.
-class const ConsoleTabs({super.key}) extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final String path = GoRouterState.of(context).uri.path;
-    final ColorScheme scheme = Theme.of(context).colorScheme;
-    Widget tab(DVRouteTarget to, String label, bool here) => DVNavLink(
-          to: to,
-          child: Container(
-            padding: const .symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(width: 3, color: here ? scheme.secondary : Colors.transparent)),
-            ),
-            child: Text(label, style: TextStyle(fontWeight: here ? .w700 : .w500)),
-          ),
-        );
-    return Wrap(spacing: 4, children: <Widget>[
-      tab(DVRoutes.console, 'Live traffic', path == DVRoutes.console.path),
-      tab(DVRoutes.consolesubscribers, 'Subscribers', path.startsWith(DVRoutes.consolesubscribers.path)),
-      tab(DVRoutes.consolecatalog, 'Plans and bundles', path.startsWith(DVRoutes.consolecatalog.path)),
-    ]);
-  }
-}
-
-/// Shows [builder] to a signed-in operator and the console sign-in to anyone else.
-class const ConsoleSignedIn({super.key, required final Widget Function(BuildContext context) builder})
-    extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) =>
-      context.global<ConsoleSession>().signedIn ? builder(context) : const _ConsoleSignIn();
-}
-
-class const _ConsoleSignIn() extends StatefulWidget {
-  @override
-  State<_ConsoleSignIn> createState() => _ConsoleSignInState();
-}
-
-class _ConsoleSignInState extends State<_ConsoleSignIn> {
-  final TextEditingController _password = TextEditingController();
-  String? _error;
-
-  @override
-  void dispose() {
-    _password.dispose();
-    super.dispose();
-  }
-
-  Future<void> _signIn() async {
-    final RtnResult result = await rtnCall(() => consoleSignIn(password: _password.text));
-    if (!mounted) return;
-    if (!result.ok) {
-      setState(() => _error = result.message);
-      return;
+  Future<void> signIn() async {
+    busy.value = true;
+    final Reply<SignedIn> who = await signInToConsole(password.read());
+    busy.value = false;
+    if (who.ok) {
+      DV.Navigation.navigate(DVRoutes.console);
+    } else {
+      problem.value = who.message;
     }
-    DV.global<ConsoleSession>(ConsoleSession(session: '${result.map['session']}'));
   }
 
-  @override
-  Widget build(BuildContext context) => Panel(
-        child: DVBox.list(<Widget>[
-          const SectionTitle('Operator sign-in'),
-          const Text('The console is for the people who run the network.'),
-          TextField(
-            controller: _password,
-            decoration: const InputDecoration(labelText: 'Console password'),
-            obscureText: true,
-            onSubmitted: (_) => _signIn(),
-          ),
-          if (_error != null) Notice(_error!),
-          Align(alignment: .centerLeft, child: BusyButton(label: 'Sign in', onPressed: _signIn)),
-          Text('demo.sh prints the password when it starts.', style: Theme.of(context).textTheme.bodySmall),
-        ], spacing: 14),
-      );
+  return Screen(<Widget>[
+    const SizedBox(height: 12),
+    const PageTitle('RTN console', subtitle: 'For the operator of this RTN network.'),
+    Panel(<Widget>[
+      Field('Console password', secret: true, value: password.read(), onChanged: (String v) => password.value = v, onSubmitted: signIn),
+      ActionButton('Sign in', tooltip: 'Sign in to the operator console', busy: busy.value, onPressed: signIn),
+      if (problem.value.isNotEmpty) Notice(problem.value),
+    ]),
+    const Empty('The password is set on the server as RTN_CONSOLE_PASSWORD; demo.sh prints it.'),
+  ], maxWidth: 420);
 }
 
-class const TrafficBoard({super.key}) extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) => Loaded(
-        load: () => asConsole((String session) => consoleTraffic(session: session)),
-        refreshEvery: const Duration(seconds: 2),
-        loadingLabel: 'Loading live traffic',
-        builder: (BuildContext context, RtnResult result, Future<void> Function() reload) {
-          final Map<String, Object?> t = result.map;
-          final Map<String, Object?> totals = asMap(t['totals']);
-          final Map<String, Object?> money = asMap(t['totals_money']);
-          final List<Map<String, Object?>> series = asList(t['series']);
-          int lastMinute(String key) => series.fold(0, (int sum, Map<String, Object?> s) => sum + asInt(s[key]));
-          final bool running = t['simulator_running'] == true;
-          return DVBox.list(<Widget>[
-            Panel(
-              child: Row(spacing: 16, children: <Widget>[
-                Expanded(
-                  child: Text(running
-                      ? 'The traffic simulator is on: every active line is browsing, calling and texting.'
-                      : 'The traffic simulator is off. Only real requests move these numbers.'),
-                ),
-                BusyButton(
-                  label: running ? 'Stop simulator' : 'Start simulator',
-                  tonal: running,
-                  onPressed: () async {
-                    await asConsole((String session) => consoleSimulator(session: session, running: !running));
-                    await reload();
-                  },
-                ),
-              ]),
-            ),
-            const SectionTitle('Right now'),
-            TileGrid(children: <Widget>[
-              StatTile(label: 'Subscribers', value: '${t['subscribers']}', note: '${t['active_subscribers']} active'),
-              StatTile(label: 'Phones attached', value: '${t['attached']}'),
-              StatTile(label: 'Calls in progress', value: '${t['active_calls']}'),
-              StatTile(label: 'SMS waiting', value: '${t['queued_sms']}', note: 'held for phones that are off'),
-            ]),
-            const SectionTitle('The last minute'),
-            TileGrid(children: <Widget>[
-              StatTile(label: 'Data', value: dataSize(lastMinute('data_bytes'))),
-              StatTile(label: 'Voice', value: '${lastMinute('voice_seconds')} s'),
-              StatTile(label: 'SMS', value: '${lastMinute('sms')}'),
-              StatTile(label: 'Revenue', value: naira(lastMinute('revenue')), accent: true),
-            ]),
-            Panel(child: TrafficChart(series: series, seriesFrom: asInt(t['series_from']))),
-            const SectionTitle('Since the core started'),
-            TileGrid(children: <Widget>[
-              StatTile(label: 'Charging requests', value: '${totals['charges']}', note: '${totals['failures']} refused'),
-              StatTile(label: 'USSD requests', value: '${totals['ussd']}'),
-              StatTile(label: 'Revenue', value: naira(money['revenue']), accent: true),
-              StatTile(label: 'Topped up', value: naira(money['topped_up'])),
-              StatTile(label: 'Lent', value: naira(money['lent']), note: '${naira(money['repaid'])} repaid'),
-            ]),
-          ], spacing: 16);
-        },
-      );
-}
+// ----- live --------------------------------------------------------------------------------
 
-class const SubscriberDirectory({super.key}) extends StatefulWidget {
-  @override
-  State<SubscriberDirectory> createState() => _SubscriberDirectoryState();
-}
+@DVFunctionalWidget()
+Widget _liveScreen(BuildContext context) {
+  final DVSignal<Reply<Traffic>?> traffic = context.signal<Reply<Traffic>?>(null);
+  Future<Reply<Traffic>> fetch() => consoleTraffic(fromJson: Reply.of(Traffic.fromJson));
+  loadInto(traffic, fetch, every: const Duration(seconds: 2));
+  final Reply<Traffic>? reply = traffic.value;
+  if (reply == null) return const Screen(<Widget>[PageTitle('Live network'), Loading(label: 'Loading live traffic')], maxWidth: 1100);
+  if (!reply.ok) {
+    return Screen(<Widget>[const PageTitle('Live network'), Refusal(reply.message, onRetry: () => reload(traffic, fetch))], maxWidth: 1100);
+  }
+  final Traffic t = reply.result;
+  final TrafficCounters lastMinute = t.series.fold(const TrafficCounters(), (TrafficCounters a, TrafficCounters b) => TrafficCounters(
+        dataBytes: a.dataBytes + b.dataBytes,
+        voiceSeconds: a.voiceSeconds + b.voiceSeconds,
+        sms: a.sms + b.sms,
+        ussd: a.ussd + b.ussd,
+        charges: a.charges + b.charges,
+        revenue: a.revenue + b.revenue,
+        failures: a.failures + b.failures,
+      ));
+  final int balances = t.money.toppedUp + t.money.lent - t.money.revenue - t.money.repaid;
 
-class _SubscriberDirectoryState extends State<SubscriberDirectory> {
-  final TextEditingController _search = TextEditingController();
-  String _query = '';
-  int _offset = 0;
-
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
+  Future<void> toggle() async {
+    await ask(() => consoleSimulator(running: !t.simulating, fromJson: Reply.of(Done.fromJson)));
+    await reload(traffic, fetch);
   }
 
-  @override
-  Widget build(BuildContext context) => DVBox.list(<Widget>[
-        TextField(
-          controller: _search,
-          decoration: InputDecoration(
-            labelText: 'Search by number, IMSI or name',
-            prefixIcon: const Icon(Icons.search),
-            suffixIcon: IconButton(
-              tooltip: 'Search',
-              icon: const Icon(Icons.arrow_forward),
-              onPressed: () => setState(() {
-                _query = _search.text.trim();
-                _offset = 0;
-              }),
+  return Screen(<Widget>[
+    const PageTitle('Live network', subtitle: 'Refreshed every two seconds.'),
+    DVBox.wrap(<Widget>[
+      Tag(t.simulating ? 'Simulator on' : 'Simulator off', warm: !t.simulating,
+          tooltip: t.simulating ? 'Simulated subscribers are using the network' : 'Only real requests are reaching the network'),
+      ActionButton(t.simulating ? 'Stop the simulator' : 'Start the simulator',
+          tooltip: t.simulating ? 'Stop the simulated traffic' : 'Start simulated calls, SMS and data across all lines',
+          primary: !t.simulating, onPressed: toggle),
+    ], spacing: 12),
+    Panel(<Widget>[
+      const SectionTitle('Right now'),
+      DVBox.wrap(<Widget>[
+        Stat('Subscribers', '${t.subscribers}', tooltip: '${t.activeSubscribers} active, ${t.subscribers - t.activeSubscribers} barred'),
+        Stat('Phones on', '${t.attached}', tooltip: 'Handsets attached to the network'),
+        Stat('Calls', '${t.activeCalls}', tooltip: 'Calls in progress'),
+        Stat('SMS waiting', '${t.queuedSms}', tooltip: 'Messages held for phones that are off'),
+        Stat('USSD sessions', '${t.ussdSessions}', tooltip: 'Open USSD menus'),
+      ], spacing: 28),
+    ]),
+    Panel(<Widget>[
+      const SectionTitle('The last minute'),
+      DVBox.wrap(<Widget>[
+        Stat('Charges', '${lastMinute.charges}', tooltip: 'Charging operations applied'),
+        Stat('Refused', '${lastMinute.failures}', tooltip: 'Operations the network refused, such as not enough airtime'),
+        Stat('Data', dataSize(lastMinute.dataBytes), tooltip: 'Data used'),
+        Stat('Voice', '${lastMinute.voiceSeconds}s', tooltip: 'Seconds of calls billed'),
+        Stat('SMS', '${lastMinute.sms}', tooltip: 'Messages sent'),
+        Stat('Revenue', naira(lastMinute.revenue), tooltip: 'Earned from usage, bundles and fees'),
+      ], spacing: 28),
+      TrafficChart(series: t.series),
+    ]),
+    Panel(<Widget>[
+      const SectionTitle('Money since the network started', hint: 'Balances + revenue + repaid always equals topped up + lent.'),
+      DVBox.wrap(<Widget>[
+        Stat('Topped up', naira(t.money.toppedUp), tooltip: 'Recharges of every kind'),
+        Stat('Lent', naira(t.money.lent), tooltip: 'Airtime loans'),
+        Stat('Repaid', naira(t.money.repaid), tooltip: 'Loans repaid, service fee included'),
+        Stat('Revenue', naira(t.money.revenue), ink: Theme.of(context).colorScheme.primary, tooltip: 'Usage, bundles and transfer fees'),
+        Stat('In balances', naira(balances), tooltip: 'Airtime subscribers hold'),
+      ], spacing: 28),
+    ]),
+  ], maxWidth: 1100);
+}
+
+/// Charges per second over the last minute, as bars.
+@DVFunctionalWidget()
+Widget _trafficChart(BuildContext context, {required List<TrafficCounters> series}) {
+  final ColorScheme colors = Theme.of(context).colorScheme;
+  final int peak = series.fold<int>(1, (int m, TrafficCounters c) => c.charges > m ? c.charges : m);
+  return DVBox.list(<Widget>[
+    DVText('Charges per second, last 60 seconds (peak $peak)').modifier(const DVModifier().fontSize(12).color(colors.onSurfaceVariant)),
+    SizedBox(
+      height: 120,
+      child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: <Widget>[
+        for (final (int i, TrafficCounters c) in series.indexed)
+          Expanded(
+            child: DVBox(
+              const SizedBox.shrink(),
+              const DVModifier()
+                  .height(4 + 116 * c.charges / peak)
+                  .marginOnly(right: 2)
+                  .rounded(2)
+                  .backgroundColor(c.failures > 0 && c.failures * 4 > c.charges ? RtnColors.rust : colors.primary)
+                  .tooltip('${60 - i}s ago: ${c.charges} charges, ${c.failures} refused, ${naira(c.revenue)}'),
             ),
           ),
-          textInputAction: TextInputAction.search,
-          onSubmitted: (String text) => setState(() {
-            _query = text.trim();
-            _offset = 0;
-          }),
-        ),
-        Loaded(
-          key: ValueKey<String>('$_query@$_offset'),
-          load: () => asConsole((String session) =>
-              consoleSubscribers(session: session, search: _query, offset: _offset)),
-          loadingLabel: 'Loading subscribers',
-          builder: (BuildContext context, RtnResult result, Future<void> Function() reload) {
-            final List<Map<String, Object?>> items = asList(result.map['items']);
-            final int total = asInt(result.map['total']);
-            return DVBox.list(<Widget>[
-              Text(total == 0
-                  ? 'No subscribers match.'
-                  : 'Showing ${_offset + 1} to ${_offset + items.length} of $total.'),
-              Panel(
-                padding: const .symmetric(vertical: 8),
-                child: SingleChildScrollView(
-                  scrollDirection: .horizontal,
-                  child: DataTable(
-                    columns: const <DataColumn>[
-                      DataColumn(label: Text('Number')),
-                      DataColumn(label: Text('Name')),
-                      DataColumn(label: Text('Plan')),
-                      DataColumn(label: Text('Status')),
-                      DataColumn(label: Text('Airtime'), numeric: true),
-                      DataColumn(label: Text('Data'), numeric: true),
-                    ],
-                    rows: <DataRow>[
-                      for (final Map<String, Object?> item in items)
-                        _row(asMap(item['subscriber']), asMap(item['balance'])),
-                    ],
-                  ),
-                ),
+      ]),
+    ),
+  ], spacing: 6, modifier: const DVModifier().semanticLabel('Bar chart of charges per second over the last minute'));
+}
+
+// ----- subscribers -------------------------------------------------------------------------
+
+@DVFunctionalWidget()
+Widget _subscribersScreen(BuildContext context) {
+  final DVSignal<Reply<SubscriberPage>?> page = context.signal<Reply<SubscriberPage>?>(null);
+  final DVSignal<String> search = context.signal('');
+  final DVSignal<int> offset = context.signal(0);
+  Future<Reply<SubscriberPage>> fetch() =>
+      consoleSubscribers(search: search.read(), offset: offset.read(), fromJson: Reply.of(SubscriberPage.fromJson));
+  loadInto(page, fetch);
+  final Reply<SubscriberPage>? reply = page.value;
+  final ColorScheme colors = Theme.of(context).colorScheme;
+
+  Future<void> go(int to) async {
+    offset.value = to < 0 ? 0 : to;
+    await reload(page, fetch);
+  }
+
+  return Screen(<Widget>[
+    const PageTitle('Subscribers', subtitle: 'Search by number, name or IMSI.'),
+    DVBox.row(<Widget>[
+      Expanded(child: Field('Search', hint: '0999 000 0001, Ada, 99970…', value: search.read(), onChanged: (String v) => search.value = v, onSubmitted: () => go(0))),
+      ActionButton('Search', tooltip: 'Find matching subscribers', onPressed: () => go(0), icon: Icons.search),
+    ], spacing: 12, crossAlign: DVCrossAlign.center),
+    if (reply == null)
+      const Loading()
+    else if (!reply.ok)
+      Refusal(reply.message, onRetry: () => reload(page, fetch))
+    else ...<Widget>[
+      Panel(<Widget>[
+        DVText('${reply.result.total} subscriber${reply.result.total == 1 ? '' : 's'}').modifier(const DVModifier().color(colors.onSurfaceVariant)),
+        for (final SubscriberRow row in reply.result.items)
+          DVNavLink(
+            to: DVRoutes.consolesubscribersMsisdn(msisdn: row.subscriber.msisdn),
+            semanticLabel: '${row.subscriber.name}, ${localNumber(row.subscriber.msisdn)}',
+            child: DVBox.row(<Widget>[
+              Expanded(
+                child: DVBox.list(<Widget>[
+                  DVText(row.subscriber.name).modifier(const DVModifier().fontWeight(FontWeight.w700)),
+                  DVText('${localNumber(row.subscriber.msisdn)} · ${row.subscriber.planId}${row.subscriber.attached ? '' : ' · phone off'}')
+                      .modifier(const DVModifier().fontSize(12).color(colors.onSurfaceVariant)),
+                ], spacing: 2),
               ),
-              DVBox.row(<Widget>[
-                if (_offset > 0)
-                  BusyButton(
-                    label: 'Previous page',
-                    tonal: true,
-                    onPressed: () async => setState(() => _offset = (_offset - 25).clamp(0, total)),
-                  ),
-                if (_offset + items.length < total)
-                  BusyButton(
-                    label: 'Next page',
-                    tonal: true,
-                    onPressed: () async => setState(() => _offset += 25),
-                  ),
-              ], spacing: 12, crossAlign: .center),
-            ], spacing: 12);
-          },
-        ),
-        const NewSubscriberForm(),
-      ], spacing: 16);
-
-  DataRow _row(Map<String, Object?> s, Map<String, Object?> b) => DataRow(cells: <DataCell>[
-        DataCell(DVNavLink(
-          to: DVRoutes.consolesubscribersMsisdn(msisdn: '${s['msisdn']}'),
-          child: Text(phone(s['msisdn']), style: const TextStyle(fontWeight: .w600, decoration: .underline)),
-        )),
-        DataCell(Text('${s['name']}')),
-        DataCell(Text('${s['plan_id']}')),
-        DataCell(Text(s['status'] == 'barred' ? 'Barred' : (s['attached'] == true ? 'Active' : 'Active, phone off'))),
-        DataCell(Text(naira(b['airtime']))),
-        DataCell(Text(dataSize(b['data_bytes']))),
-      ]);
-}
-
-class const NewSubscriberForm({super.key}) extends StatefulWidget {
-  @override
-  State<NewSubscriberForm> createState() => _NewSubscriberFormState();
-}
-
-class _NewSubscriberFormState extends State<NewSubscriberForm> {
-  final TextEditingController _number = TextEditingController();
-  final TextEditingController _name = TextEditingController();
-  final TextEditingController _pin = TextEditingController();
-  String _plan = '';
-  String? _message;
-  bool _error = false;
-
-  @override
-  void dispose() {
-    _number.dispose();
-    _name.dispose();
-    _pin.dispose();
-    super.dispose();
-  }
-
-  Future<void> _add() async {
-    final RtnResult result = await asConsole((String session) => consoleAddSubscriber(
-          session: session,
-          msisdn: _number.text,
-          name: _name.text,
-          pin: _pin.text,
-          planId: _plan,
-        ));
-    if (!mounted) return;
-    setState(() {
-      _error = !result.ok;
-      _message = result.ok
-          ? 'Added ${result.map['name']} on ${phone(result.map['msisdn'])}, SIM ${result.map['imsi']}.'
-          : result.message;
-      if (result.ok) {
-        _number.clear();
-        _name.clear();
-        _pin.clear();
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) => Panel(
-        child: DVBox.list(<Widget>[
-          const SectionTitle('Add a subscriber'),
-          TextField(controller: _number, decoration: const InputDecoration(labelText: 'Number'), keyboardType: TextInputType.phone),
-          TextField(controller: _name, decoration: const InputDecoration(labelText: 'Full name')),
-          TextField(
-            controller: _pin,
-            decoration: const InputDecoration(labelText: 'Starting PIN (4 to 6 digits)'),
-            keyboardType: TextInputType.number,
-            onSubmitted: (_) => _add(),
+              if (row.subscriber.barred) const Tag('Barred', warm: true, tooltip: 'This line cannot be charged'),
+              DVText(naira(row.balance.airtime)).modifier(const DVModifier().fontWeight(FontWeight.w700)),
+              DVText(dataSize(row.balance.dataBytes)).modifier(const DVModifier().color(colors.onSurfaceVariant)),
+            ], spacing: 12, crossAlign: DVCrossAlign.center).modifier(const DVModifier()
+                .paddingSymmetric(vertical: 8)
+                .tooltip('Open ${row.subscriber.name}\'s file')),
           ),
-          DropdownButtonFormField<String>(
-            initialValue: _plan,
-            decoration: const InputDecoration(labelText: 'Plan'),
-            items: const <DropdownMenuItem<String>>[
-              DropdownMenuItem<String>(value: '', child: Text('Default plan')),
-              DropdownMenuItem<String>(value: 'pulse', child: Text('Pulse')),
-              DropdownMenuItem<String>(value: 'steady', child: Text('Steady')),
-            ],
-            onChanged: (String? value) => setState(() => _plan = value ?? ''),
-          ),
-          if (_message != null) Notice(_message!, error: _error),
-          Align(alignment: .centerLeft, child: BusyButton(label: 'Add subscriber', onPressed: _add)),
-        ], spacing: 12),
-      );
+      ], spacing: 2),
+      DVBox.wrap(<Widget>[
+        ActionButton('Previous', tooltip: 'The previous 25', primary: false,
+            onPressed: offset.value == 0 ? null : () => go(offset.read() - 25)),
+        ActionButton('Next', tooltip: 'The next 25', primary: false,
+            onPressed: offset.value + 25 >= reply.result.total ? null : () => go(offset.read() + 25)),
+      ], spacing: 8),
+    ],
+    AddSubscriberForm(onAdded: () => go(0)),
+  ], maxWidth: 1000);
 }
 
-class const SubscriberDetail({super.key, required final String msisdn}) extends StatefulWidget {
-  @override
-  State<SubscriberDetail> createState() => _SubscriberDetailState();
-}
+@DVFunctionalWidget()
+Widget _addSubscriberForm(BuildContext context, {required VoidCallback onAdded}) {
+  final DVSignal<String> number = context.signal('');
+  final DVSignal<String> name = context.signal('');
+  final DVSignal<String> pin = context.signal('');
+  final DVSignal<Reply<Subscriber>?> result = context.signal<Reply<Subscriber>?>(null);
 
-class _SubscriberDetailState extends State<SubscriberDetail> {
-  final TextEditingController _topUp = TextEditingController();
-  String? _message;
-  bool _error = false;
-
-  @override
-  void dispose() {
-    _topUp.dispose();
-    super.dispose();
+  Future<void> add() async {
+    result.value = await ask(() => consoleAddSubscriber(
+        msisdn: number.read(), name: name.read(), pin: pin.read(), planId: '', fromJson: Reply.of(Subscriber.fromJson)));
+    if (result.read()?.ok ?? false) onAdded();
   }
 
-  Future<void> _act(Future<RtnResult> Function() action, String done, Future<void> Function() reload) async {
-    final RtnResult result = await action();
-    if (!mounted) return;
-    setState(() {
-      _error = !result.ok;
-      _message = result.ok ? done : result.message;
-    });
-    await reload();
-  }
-
-  @override
-  Widget build(BuildContext context) => Loaded(
-        load: () => asConsole((String session) => consoleSubscriber(session: session, msisdn: widget.msisdn)),
-        refreshEvery: const Duration(seconds: 5),
-        loadingLabel: 'Loading the subscriber',
-        builder: (BuildContext context, RtnResult result, Future<void> Function() reload) {
-          final Map<String, Object?> s = asMap(result.map['subscriber']);
-          final Map<String, Object?> b = asMap(result.map['balance']);
-          final List<Map<String, Object?>> history = asList(result.map['history']);
-          final bool barred = s['status'] == 'barred';
-          return DVBox.list(<Widget>[
-            PageHeading('${s['name']}', subtitle: '${phone(s['msisdn'])} · SIM ${s['imsi']}'),
-            if (_message != null) Notice(_message!, error: _error),
-            TileGrid(children: <Widget>[
-              StatTile(label: 'Airtime', value: naira(b['airtime'])),
-              StatTile(label: 'Data', value: dataSize(b['data_bytes'])),
-              StatTile(label: 'Loan', value: naira(b['loan']), accent: asInt(b['loan']) > 0),
-              StatTile(label: 'Status', value: barred ? 'Barred' : 'Active', note: s['attached'] == true ? 'Phone attached' : 'Phone off'),
-            ]),
-            Panel(
-              child: DVBox.list(<Widget>[
-                const SectionTitle('Manage this line'),
-                Wrap(spacing: 12, runSpacing: 12, crossAxisAlignment: .center, children: <Widget>[
-                  BusyButton(
-                    label: barred ? 'Lift the bar' : 'Bar this line',
-                    tonal: !barred,
-                    onPressed: () => _act(
-                      () => asConsole((String session) => consoleUpdateSubscriber(
-                          session: session, msisdn: widget.msisdn, status: barred ? 'active' : 'barred', planId: '')),
-                      barred ? 'The line is active again.' : 'The line is barred.',
-                      reload,
-                    ),
-                  ),
-                  for (final String plan in <String>['pulse', 'steady'])
-                    if (plan != s['plan_id'])
-                      BusyButton(
-                        label: 'Move to $plan',
-                        tonal: true,
-                        onPressed: () => _act(
-                          () => asConsole((String session) => consoleUpdateSubscriber(
-                              session: session, msisdn: widget.msisdn, status: '', planId: plan)),
-                          'Moved to $plan.',
-                          reload,
-                        ),
-                      ),
-                ]),
-                Row(spacing: 12, children: <Widget>[
-                  Expanded(
-                    child: TextField(
-                      controller: _topUp,
-                      decoration: const InputDecoration(labelText: 'Top up, in naira', prefixText: '₦ '),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    ),
-                  ),
-                  BusyButton(
-                    label: 'Top up',
-                    onPressed: () => _act(
-                      () => asConsole((String session) => consoleTopUp(
-                          session: session, msisdn: widget.msisdn, naira: _topUp.text, requestId: newRequestId('console'))),
-                      'Topped up.',
-                      reload,
-                    ),
-                  ),
-                ]),
-              ], spacing: 14),
-            ),
-            Panel(
-              padding: const .symmetric(vertical: 12),
-              child: DVBox.list(<Widget>[
-                const Padding(padding: .symmetric(horizontal: 16), child: SectionTitle('Recent ledger')),
-                if (history.isEmpty) const Padding(padding: .symmetric(horizontal: 16), child: Text('Nothing yet.')),
-                for (final Map<String, Object?> e in history.take(25))
-                  ListTile(
-                    dense: true,
-                    title: Text('${entryKind(e['kind'])}: ${e['note']}'),
-                    subtitle: Text('${when(e['at'])} · ${e['request_id']}'),
-                    trailing: Text(naira(e['airtime_after'])),
-                  ),
-              ]),
-            ),
-          ], spacing: 16);
-        },
-      );
+  final Reply<Subscriber>? done = result.value;
+  return Panel(<Widget>[
+    const SectionTitle('Add a subscriber', hint: 'Numbers in RTN\'s range, 0999…. A new SIM is issued.'),
+    Field('Number', hint: '0999 123 4567', value: number.read(), onChanged: (String v) => number.value = v),
+    Field('Name', value: name.read(), onChanged: (String v) => name.value = v),
+    Field('PIN', hint: '4 to 6 digits', secret: true, value: pin.read(), onChanged: (String v) => pin.value = v),
+    ActionButton('Add subscriber', tooltip: 'Create this line', onPressed: add, icon: Icons.person_add_alt),
+    if (done != null)
+      done.ok ? Notice('Added ${done.result.name} on SIM ${done.result.imsi}.', tone: 'good') : Notice(done.message),
+  ]);
 }
 
-class const CatalogEditor({super.key}) extends StatefulWidget {
-  @override
-  State<CatalogEditor> createState() => _CatalogEditorState();
-}
+@DVFunctionalWidget()
+Widget _subscriberFileScreen(BuildContext context, String msisdn) {
+  final DVSignal<Reply<SubscriberFile>?> file = context.signal<Reply<SubscriberFile>?>(null);
+  final DVSignal<String> amount = context.signal('');
+  final DVSignal<String> limit = context.signal('');
+  final DVSignal<String> pin = context.signal('');
+  final DVSignal<String> note = context.signal('');
+  final DVSignal<String> problem = context.signal('');
+  Future<Reply<SubscriberFile>> fetch() => consoleSubscriber(msisdn: msisdn, fromJson: Reply.of(SubscriberFile.fromJson));
+  loadInto(file, fetch, every: const Duration(seconds: 5));
+  final Reply<SubscriberFile>? reply = file.value;
+  if (reply == null) return const Screen(<Widget>[PageTitle('Subscriber'), Loading()]);
+  if (!reply.ok) return Screen(<Widget>[const PageTitle('Subscriber'), Refusal(reply.message, onRetry: () => reload(file, fetch))]);
+  final SubscriberFile f = reply.result;
+  final Subscriber s = f.line.subscriber;
+  final Balance b = f.line.balance;
 
-class _CatalogEditorState extends State<CatalogEditor> {
-  String? _message;
-  bool _error = false;
-
-  void _report(RtnResult result, String done) => setState(() {
-        _error = !result.ok;
-        _message = result.ok ? done : result.message;
-      });
-
-  @override
-  Widget build(BuildContext context) => Loaded(
-        load: () => asConsole((String session) => consoleCatalog(session: session)),
-        loadingLabel: 'Loading plans and bundles',
-        builder: (BuildContext context, RtnResult result, Future<void> Function() reload) {
-          final List<Map<String, Object?>> plans = asList(asMap(result.map['plans']).values.toList());
-          final List<Map<String, Object?>> bundles = asList(result.map['bundles']);
-          return DVBox.list(<Widget>[
-            if (_message != null) Notice(_message!, error: _error),
-            const SectionTitle('Rating plans'),
-            const Text('Rates apply from the next charge. A call in progress keeps the rate it started with.'),
-            for (final Map<String, Object?> p in plans)
-              _PlanForm(plan: p, onSaved: (RtnResult r) async {
-                _report(r, 'Saved ${p['name']}.');
-                await reload();
-              }),
-            _PlanForm(plan: const <String, Object?>{}, onSaved: (RtnResult r) async {
-              _report(r, 'Plan added.');
-              await reload();
-            }),
-            const SectionTitle('Data bundles'),
-            for (final Map<String, Object?> b in bundles)
-              _BundleForm(bundle: b, onSaved: (RtnResult r) async {
-                _report(r, 'Saved ${b['name']}.');
-                await reload();
-              }),
-            _BundleForm(bundle: const <String, Object?>{}, onSaved: (RtnResult r) async {
-              _report(r, 'Bundle added.');
-              await reload();
-            }),
-          ], spacing: 14);
-        },
-      );
-}
-
-String _nairaField(Object? units) => units == null ? '' : (asInt(units) / 100).toStringAsFixed(2);
-
-class const _PlanForm({required final Map<String, Object?> plan, required final Future<void> Function(RtnResult) onSaved})
-    extends StatefulWidget {
-  @override
-  State<_PlanForm> createState() => _PlanFormState();
-}
-
-class _PlanFormState extends State<_PlanForm> {
-  late final TextEditingController _id = TextEditingController(text: '${widget.plan['id'] ?? ''}');
-  late final TextEditingController _name = TextEditingController(text: '${widget.plan['name'] ?? ''}');
-  late final TextEditingController _voice =
-      TextEditingController(text: '${widget.plan['voice_per_second'] ?? ''}');
-  late final TextEditingController _sms = TextEditingController(text: _nairaField(widget.plan['sms_per_segment']));
-  late final TextEditingController _data = TextEditingController(text: _nairaField(widget.plan['data_per_mb']));
-
-  @override
-  void dispose() {
-    for (final TextEditingController c in <TextEditingController>[_id, _name, _voice, _sms, _data]) {
-      c.dispose();
+  Future<void> act(Future<Reply<Object?>> Function() action, String success) async {
+    note.value = '';
+    problem.value = '';
+    final Reply<Object?> r = await ask(action);
+    if (r.ok) {
+      note.value = success;
+    } else {
+      problem.value = r.message;
     }
-    super.dispose();
+    await reload(file, fetch);
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final bool isNew = widget.plan.isEmpty;
-    Widget field(TextEditingController c, String label, {bool enabled = true}) => SizedBox(
-          width: 180,
-          child: TextField(controller: c, enabled: enabled, decoration: InputDecoration(labelText: label)),
-        );
-    return Panel(
-      child: DVBox.list(<Widget>[
-        Text(isNew ? 'New plan' : '${widget.plan['name']}', style: Theme.of(context).textTheme.titleMedium),
-        Wrap(spacing: 12, runSpacing: 12, children: <Widget>[
-          field(_id, 'Id', enabled: isNew),
-          field(_name, 'Name'),
-          field(_voice, 'Voice, kobo a second'),
-          field(_sms, 'SMS, naira a part'),
-          field(_data, 'Data, naira per MB'),
-        ]),
-        Align(
-          alignment: .centerLeft,
-          child: BusyButton(
-            label: isNew ? 'Add plan' : 'Save ${widget.plan['name']}',
-            onPressed: () async => widget.onSaved(await asConsole((String session) => consoleSavePlan(
-                  session: session,
-                  id: _id.text,
-                  name: _name.text,
-                  voiceKoboPerSecond: _voice.text,
-                  smsNaira: _sms.text,
-                  dataNairaPerMb: _data.text,
-                ))),
-          ),
-        ),
-      ], spacing: 12),
-    );
-  }
+  return Screen(<Widget>[
+    PageTitle(s.name, subtitle: '${localNumber(s.msisdn)} · SIM ${s.imsi}'),
+    const TextLink(DVRoutes.consolesubscribers, 'All subscribers', tooltip: 'Back to the subscriber list'),
+    if (note.value.isNotEmpty) Notice(note.value, tone: 'good'),
+    if (problem.value.isNotEmpty) Notice(problem.value),
+    Panel(<Widget>[
+      DVBox.wrap(<Widget>[
+        Stat('Status', s.barred ? 'Barred' : 'Active', ink: s.barred ? RtnColors.rust : null, tooltip: 'Whether the line can be charged'),
+        Stat('Phone', s.attached ? 'On' : 'Off', tooltip: 'Whether the handset is attached'),
+        Stat('Airtime', naira(b.airtime), tooltip: '${naira(b.reserved)} held for calls'),
+        Stat('Data', dataSize(b.dataBytes), tooltip: '${b.bundles.length} bundles'),
+        Stat('Loan', naira(b.loan), tooltip: 'Limit ${naira(b.loanLimit)}'),
+        Stat('Points', '${b.points}', tooltip: 'Loyalty points'),
+      ], spacing: 28),
+      DVBox.wrap(<Widget>[
+        ActionButton(s.barred ? 'Lift the bar' : 'Bar the line',
+            tooltip: s.barred ? 'Let this line be charged again' : 'Stop all charging on this line', danger: !s.barred,
+            onPressed: () => act(() => consoleSetStatus(msisdn: s.msisdn, status: s.barred ? 'active' : 'barred', fromJson: Reply.of(Done.fromJson)),
+                s.barred ? 'The line is active.' : 'The line is barred.')),
+      ], spacing: 8),
+    ]),
+    Panel(<Widget>[
+      const SectionTitle('Top up'),
+      DVBox.row(<Widget>[
+        Expanded(child: Field('Amount in naira', hint: '500', value: amount.read(), onChanged: (String v) => amount.value = v)),
+        ActionButton('Top up', tooltip: 'Credit this line', onPressed: () => act(
+            () => consoleTopUp(msisdn: s.msisdn, amount: amount.read(), attempt: newAttempt(), fromJson: Reply.of(Outcome.fromJson)),
+            'Topped up.')),
+      ], spacing: 12, crossAlign: DVCrossAlign.center),
+      const SectionTitle('Plan'),
+      Choices(<String>[for (final Plan p in f.plans) p.id], selected: s.planId, what: 'plan',
+          onSelected: (String id) => act(() => consoleSetPlan(msisdn: s.msisdn, planId: id, fromJson: Reply.of(Done.fromJson)), 'Plan changed.')),
+      const SectionTitle('Loan limit'),
+      DVBox.row(<Widget>[
+        Expanded(child: Field('Limit in naira', hint: naira(b.loanLimit), value: limit.read(), onChanged: (String v) => limit.value = v)),
+        ActionButton('Set', tooltip: 'Set how much this line may borrow', primary: false, onPressed: () => act(
+            () => consoleSetLoanLimit(msisdn: s.msisdn, amount: limit.read(), fromJson: Reply.of(Done.fromJson)), 'Loan limit set.')),
+      ], spacing: 12, crossAlign: DVCrossAlign.center),
+      const SectionTitle('Reset the PIN', hint: 'Only after checking it is them.'),
+      DVBox.row(<Widget>[
+        Expanded(child: Field('New PIN', secret: true, value: pin.read(), onChanged: (String v) => pin.value = v)),
+        ActionButton('Reset', tooltip: 'Give this line a new PIN', primary: false, onPressed: () => act(
+            () => consoleResetPin(msisdn: s.msisdn, pin: pin.read(), fromJson: Reply.of(Done.fromJson)), 'PIN reset.')),
+      ], spacing: 12, crossAlign: DVCrossAlign.center),
+    ]),
+    Panel(<Widget>[
+      const SectionTitle('Ledger'),
+      if (f.history.isEmpty) const Empty('No entries.'),
+      for (final LedgerEntry e in f.history) LedgerRow(entry: e),
+    ], spacing: 2),
+    Panel(<Widget>[
+      const SectionTitle('Delivered SMS'),
+      if (f.inbox.isEmpty) const Empty('None.'),
+      for (final SmsMessage m in f.inbox) DVText('${localNumber(m.from)}: ${m.text}'),
+    ], spacing: 4),
+  ], maxWidth: 1000);
 }
 
-class const _BundleForm({required final Map<String, Object?> bundle, required final Future<void> Function(RtnResult) onSaved})
-    extends StatefulWidget {
-  @override
-  State<_BundleForm> createState() => _BundleFormState();
+/// One ledger entry, as the operator reads it.
+@DVFunctionalWidget()
+Widget _ledgerRow(BuildContext context, {required LedgerEntry entry, bool showLine = false}) {
+  final ColorScheme colors = Theme.of(context).colorScheme;
+  final List<String> parts = <String>[
+    if (entry.airtimeDelta != 0) '${entry.airtimeDelta > 0 ? '+' : ''}${naira(entry.airtimeDelta)}',
+    if (entry.dataDelta != 0) '${entry.dataDelta > 0 ? '+' : '−'}${dataSize(entry.dataDelta.abs())}',
+    if (entry.loanDelta != 0) 'loan ${entry.loanDelta > 0 ? '+' : ''}${naira(entry.loanDelta)}',
+  ];
+  return DVBox.row(<Widget>[
+    DVText('#${entry.seq}').modifier(const DVModifier().fontSize(12).color(colors.onSurfaceVariant).tooltip('Ledger entry ${entry.seq}')),
+    Expanded(
+      child: DVBox.list(<Widget>[
+        DVText('${entryTitle(entry.kind)}${showLine ? ' · ${localNumber(entry.msisdn)}' : ''}').modifier(const DVModifier().fontWeight(FontWeight.w700)),
+        DVText('${entry.note} · ${shortTime(entry.at)}').modifier(const DVModifier().fontSize(12).color(colors.onSurfaceVariant)),
+      ], spacing: 2),
+    ),
+    DVText(parts.join('  ')).modifier(const DVModifier().fontWeight(FontWeight.w700)),
+  ], spacing: 12, crossAlign: DVCrossAlign.center).modifier(const DVModifier()
+      .paddingSymmetric(vertical: 6)
+      .tooltip('Request ${entry.requestId}; airtime after ${naira(entry.airtimeAfter)}'));
 }
 
-class _BundleFormState extends State<_BundleForm> {
-  late final TextEditingController _id = TextEditingController(text: '${widget.bundle['id'] ?? ''}');
-  late final TextEditingController _name = TextEditingController(text: '${widget.bundle['name'] ?? ''}');
-  late final TextEditingController _mb = TextEditingController(
-      text: widget.bundle['data_bytes'] == null ? '' : '${asInt(widget.bundle['data_bytes']) ~/ 1048576}');
-  late final TextEditingController _price = TextEditingController(text: _nairaField(widget.bundle['price']));
-  late final TextEditingController _days = TextEditingController(text: '${widget.bundle['validity_days'] ?? ''}');
+// ----- catalogue ---------------------------------------------------------------------------
 
-  @override
-  void dispose() {
-    for (final TextEditingController c in <TextEditingController>[_id, _name, _mb, _price, _days]) {
-      c.dispose();
-    }
-    super.dispose();
+@DVFunctionalWidget()
+Widget _catalogScreen(BuildContext context) {
+  final DVSignal<Reply<Catalog>?> catalog = context.signal<Reply<Catalog>?>(null);
+  Future<Reply<Catalog>> fetch() => consoleCatalog(fromJson: Reply.of(Catalog.fromJson));
+  loadInto(catalog, fetch);
+  final Reply<Catalog>? reply = catalog.value;
+  if (reply == null) return const Screen(<Widget>[PageTitle('Catalogue'), Loading()]);
+  if (!reply.ok) return Screen(<Widget>[const PageTitle('Catalogue'), Refusal(reply.message, onRetry: () => reload(catalog, fetch))]);
+  final Catalog c = reply.result;
+  return Screen(<Widget>[
+    const PageTitle('Catalogue', subtitle: 'A change applies to the next charge. Bundles already bought keep what they were sold with.'),
+    const SectionTitle('Rating plans', hint: 'Rates in kobo: per second of call, per SMS part, per MB outside a bundle.'),
+    for (final Plan p in c.plans) PlanEditor(plan: p, onSaved: () => reload(catalog, fetch)),
+    PlanEditor(plan: const Plan(id: '', name: ''), onSaved: () => reload(catalog, fetch)),
+    const SectionTitle('Data bundles'),
+    for (final Bundle b in c.bundles) BundleEditor(bundle: b, onSaved: () => reload(catalog, fetch)),
+    BundleEditor(bundle: const Bundle(id: '', name: ''), onSaved: () => reload(catalog, fetch)),
+  ], maxWidth: 1000);
+}
+
+@DVFunctionalWidget()
+Widget _planEditor(BuildContext context, {required Plan plan, required VoidCallback onSaved}) {
+  final bool fresh = plan.id.isEmpty;
+  final DVSignal<String> id = context.signal(plan.id);
+  final DVSignal<String> name = context.signal(plan.name);
+  final DVSignal<String> voice = context.signal(fresh ? '' : '${plan.voicePerSecond}');
+  final DVSignal<String> sms = context.signal(fresh ? '' : '${plan.smsPerSegment}');
+  final DVSignal<String> data = context.signal(fresh ? '' : '${plan.dataPerMb}');
+  final DVSignal<Reply<Done>?> result = context.signal<Reply<Done>?>(null);
+
+  Future<void> save() async {
+    result.value = await ask(() => consoleSavePlan(
+        id: id.read(), name: name.read(), voicePerSecond: voice.read(), smsPerSegment: sms.read(), dataPerMb: data.read(),
+        fromJson: Reply.of(Done.fromJson)));
+    if (result.read()?.ok ?? false) onSaved();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final bool isNew = widget.bundle.isEmpty;
-    Widget field(TextEditingController c, String label, {bool enabled = true}) => SizedBox(
-          width: 180,
-          child: TextField(controller: c, enabled: enabled, decoration: InputDecoration(labelText: label)),
-        );
-    return Panel(
-      child: DVBox.list(<Widget>[
-        Text(isNew ? 'New bundle' : '${widget.bundle['name']}', style: Theme.of(context).textTheme.titleMedium),
-        Wrap(spacing: 12, runSpacing: 12, children: <Widget>[
-          field(_id, 'Id', enabled: isNew),
-          field(_name, 'Name'),
-          field(_mb, 'Data, MB'),
-          field(_price, 'Price, naira'),
-          field(_days, 'Valid for, days'),
-        ]),
-        Align(
-          alignment: .centerLeft,
-          child: BusyButton(
-            label: isNew ? 'Add bundle' : 'Save ${widget.bundle['name']}',
-            onPressed: () async => widget.onSaved(await asConsole((String session) => consoleSaveBundle(
-                  session: session,
-                  id: _id.text,
-                  name: _name.text,
-                  dataMb: int.tryParse(_mb.text.trim()) ?? 0,
-                  priceNaira: _price.text,
-                  validityDays: int.tryParse(_days.text.trim()) ?? 0,
-                ))),
-          ),
-        ),
+  return Panel(<Widget>[
+    DVText(fresh ? 'New plan' : plan.name).modifier(const DVModifier().fontWeight(FontWeight.w800)),
+    DVBox.wrap(<Widget>[
+      if (fresh) SizedBox(width: 160, child: Field('Id', hint: 'night-owl', value: id.read(), onChanged: (String v) => id.value = v)),
+      SizedBox(width: 180, child: Field('Name', value: name.read(), onChanged: (String v) => name.value = v)),
+      SizedBox(width: 120, child: Field('Voice /s', value: voice.read(), onChanged: (String v) => voice.value = v)),
+      SizedBox(width: 120, child: Field('SMS /part', value: sms.read(), onChanged: (String v) => sms.value = v)),
+      SizedBox(width: 120, child: Field('Data /MB', value: data.read(), onChanged: (String v) => data.value = v)),
+    ], spacing: 12),
+    ActionButton(fresh ? 'Add plan' : 'Save ${plan.name}', tooltip: fresh ? 'Add this rating plan' : 'Save the new rates', primary: fresh, onPressed: save),
+    if (result.value case final Reply<Done> r) r.ok ? const Notice('Saved.', tone: 'good') : Notice(r.message),
+  ], spacing: 8);
+}
+
+@DVFunctionalWidget()
+Widget _bundleEditor(BuildContext context, {required Bundle bundle, required VoidCallback onSaved}) {
+  final bool fresh = bundle.id.isEmpty;
+  final DVSignal<String> id = context.signal(bundle.id);
+  final DVSignal<String> name = context.signal(bundle.name);
+  final DVSignal<String> size = context.signal(fresh ? '' : '${bundle.dataBytes ~/ mb}');
+  final DVSignal<String> price = context.signal(fresh ? '' : '${bundle.price ~/ 100}');
+  final DVSignal<String> days = context.signal(fresh ? '' : '${bundle.validityDays}');
+  final DVSignal<String> offer = context.signal(bundle.offer ?? '');
+  final DVSignal<Reply<Done>?> result = context.signal<Reply<Done>?>(null);
+
+  Future<void> save() async {
+    result.value = await ask(() => consoleSaveBundle(
+        id: id.read(), name: name.read(), megabytes: size.read(), price: price.read(), validityDays: days.read(), offer: offer.read(),
+        fromJson: Reply.of(Done.fromJson)));
+    if (result.read()?.ok ?? false) onSaved();
+  }
+
+  return Panel(<Widget>[
+    DVText(fresh ? 'New bundle' : bundle.name).modifier(const DVModifier().fontWeight(FontWeight.w800)),
+    DVBox.wrap(<Widget>[
+      if (fresh) SizedBox(width: 160, child: Field('Id', hint: 'night-2gb', value: id.read(), onChanged: (String v) => id.value = v)),
+      SizedBox(width: 180, child: Field('Name', value: name.read(), onChanged: (String v) => name.value = v)),
+      SizedBox(width: 110, child: Field('MB', value: size.read(), onChanged: (String v) => size.value = v)),
+      SizedBox(width: 110, child: Field('Price ₦', value: price.read(), onChanged: (String v) => price.value = v)),
+      SizedBox(width: 90, child: Field('Days', value: days.read(), onChanged: (String v) => days.value = v)),
+      SizedBox(width: 180, child: Field('Offer line', hint: 'Best value', value: offer.read(), onChanged: (String v) => offer.value = v)),
+    ], spacing: 12),
+    ActionButton(fresh ? 'Add bundle' : 'Save ${bundle.name}', tooltip: fresh ? 'Add this bundle to the catalogue' : 'Save this bundle', primary: fresh, onPressed: save),
+    if (result.value case final Reply<Done> r) r.ok ? const Notice('Saved.', tone: 'good') : Notice(r.message),
+  ], spacing: 8);
+}
+
+// ----- vouchers ----------------------------------------------------------------------------
+
+@DVFunctionalWidget()
+Widget _vouchersScreen(BuildContext context) {
+  final DVSignal<Reply<VoucherBook>?> book = context.signal<Reply<VoucherBook>?>(null);
+  final DVSignal<String> count = context.signal('5');
+  final DVSignal<String> amount = context.signal('500');
+  final DVSignal<bool> busy = context.signal(false);
+  Future<Reply<VoucherBook>> fetch() => consoleVouchers(fromJson: Reply.of(VoucherBook.fromJson));
+  loadInto(book, fetch);
+  final Reply<VoucherBook>? reply = book.value;
+  final ColorScheme colors = Theme.of(context).colorScheme;
+
+  Future<void> printBatch() async {
+    busy.value = true;
+    book.value = await ask(() => consoleIssueVouchers(count: count.read(), amount: amount.read(), fromJson: Reply.of(VoucherBook.fromJson)));
+    busy.value = false;
+  }
+
+  return Screen(<Widget>[
+    const PageTitle('Vouchers', subtitle: 'Scratch-card recharge vouchers. A PIN is shown once, when it is printed.'),
+    Panel(<Widget>[
+      const SectionTitle('Print a batch'),
+      DVBox.wrap(<Widget>[
+        SizedBox(width: 140, child: Field('How many', value: count.read(), onChanged: (String v) => count.value = v)),
+        SizedBox(width: 160, child: Field('Value in naira', value: amount.read(), onChanged: (String v) => amount.value = v)),
       ], spacing: 12),
-    );
+      ActionButton('Print vouchers', tooltip: 'Issue a batch of new vouchers', busy: busy.value, onPressed: printBatch, icon: Icons.print_outlined),
+    ]),
+    if (reply == null)
+      const Loading()
+    else if (!reply.ok)
+      Refusal(reply.message, onRetry: () => reload(book, fetch))
+    else ...<Widget>[
+      if (reply.result.printed.isNotEmpty)
+        Panel(<Widget>[
+          const SectionTitle('Just printed', hint: 'Hand these out now: the PINs are not kept and will not be shown again.'),
+          for (final PrintedVoucher v in reply.result.printed)
+            DVBox.row(<Widget>[
+              DVText(v.serial).modifier(const DVModifier().color(colors.onSurfaceVariant)),
+              Expanded(
+                child: DVText(<String>[for (int i = 0; i < v.pin.length; i += 4) v.pin.substring(i, i + 4)].join(' '))
+                    .modifier(const DVModifier().fontFamily('monospace').fontWeight(FontWeight.w700).fontSize(16)),
+              ),
+              DVText(naira(v.amount)),
+            ], spacing: 12, crossAlign: DVCrossAlign.center),
+        ], accent: true),
+      Panel(<Widget>[
+        const SectionTitle('All vouchers'),
+        if (reply.result.vouchers.isEmpty) const Empty('None printed yet.'),
+        for (final Voucher v in reply.result.vouchers)
+          DVBox.row(<Widget>[
+            Expanded(child: DVText(v.serial)),
+            DVText(naira(v.amount)),
+            Tag(v.usedBy == null ? 'Unused' : 'Used by ${localNumber(v.usedBy!)}', warm: v.usedBy != null,
+                tooltip: v.usedBy == null ? 'Printed ${shortTime(v.createdAt)}' : 'Redeemed ${shortTime(v.usedAt ?? 0)}'),
+          ], spacing: 12, crossAlign: DVCrossAlign.center),
+      ], spacing: 6),
+    ],
+  ], maxWidth: 900);
+}
+
+// ----- care --------------------------------------------------------------------------------
+
+@DVFunctionalWidget()
+Widget _careDeskScreen(BuildContext context) {
+  final DVSignal<Reply<CareDesk>?> desk = context.signal<Reply<CareDesk>?>(null);
+  final DVSignal<String> open = context.signal('');
+  Future<Reply<CareDesk>> fetch() => consoleCareDesk(fromJson: Reply.of(CareDesk.fromJson));
+  loadInto(desk, fetch, every: const Duration(seconds: 4));
+  final Reply<CareDesk>? reply = desk.value;
+  final ColorScheme colors = Theme.of(context).colorScheme;
+  return Screen(<Widget>[
+    const PageTitle('Care', subtitle: 'Conversations waiting for an answer come first. Replying takes over from the assistant.'),
+    if (reply == null)
+      const Loading()
+    else if (!reply.ok)
+      Refusal(reply.message, onRetry: () => reload(desk, fetch))
+    else
+      Panel(<Widget>[
+        if (reply.result.threads.isEmpty) const Empty('Nobody has written yet.'),
+        for (final CareThread t in reply.result.threads)
+          DVBox.row(<Widget>[
+            Expanded(
+              child: DVBox.list(<Widget>[
+                DVText('${t.name} · ${localNumber(t.msisdn)}').modifier(const DVModifier().fontWeight(FontWeight.w700)),
+                DVText(t.lastText).modifier(const DVModifier().maxLines(1).color(colors.onSurfaceVariant)),
+              ], spacing: 2),
+            ),
+            if (t.waiting) const Tag('Waiting', warm: true, tooltip: 'The subscriber wrote last'),
+          ], spacing: 12, crossAlign: DVCrossAlign.center).modifier(const DVModifier()
+              .paddingSymmetric(vertical: 8, horizontal: 8)
+              .rounded(12)
+              .backgroundColor(open.value == t.msisdn ? colors.primaryContainer : Colors.transparent)
+              .tooltip('Open the conversation with ${t.name}')
+              .onTap(() => open.value = t.msisdn)),
+      ], spacing: 2),
+    // Keyed by the number, so opening another conversation starts afresh.
+    if (open.value.isNotEmpty) CareThreadView(msisdn: open.value, key: ValueKey<String>(open.value)),
+  ], maxWidth: 900);
+}
+
+@DVFunctionalWidget()
+Widget _careThreadView(BuildContext context, {required String msisdn}) {
+  final DVSignal<Reply<CareChat>?> chat = context.signal<Reply<CareChat>?>(null);
+  final DVSignal<String> draft = context.signal('');
+  Future<Reply<CareChat>> fetch() => consoleCareThread(msisdn: msisdn, fromJson: Reply.of(CareChat.fromJson));
+  loadInto(chat, fetch, every: const Duration(seconds: 4));
+  final Reply<CareChat>? reply = chat.value;
+
+  Future<void> send() async {
+    if (draft.read().trim().isEmpty) return;
+    chat.value = await ask(() => consoleCareReply(msisdn: msisdn, text: draft.read(), fromJson: Reply.of(CareChat.fromJson)));
+    draft.value = '';
   }
+
+  return Panel(<Widget>[
+    SectionTitle('Conversation with ${localNumber(msisdn)}'),
+    if (reply == null)
+      const Loading()
+    else if (!reply.ok)
+      Notice(reply.message)
+    else
+      for (final CareMessage m in reply.result.messages)
+        ChatBubble(message: m, operator: true),
+    KeyedSubtree(
+      key: ValueKey<int>(reply?.value?.messages.length ?? 0),
+      child: Field('Your answer', value: draft.read(), onChanged: (String v) => draft.value = v, onSubmitted: send),
+    ),
+    ActionButton('Send answer', tooltip: 'Answer as an RTN care agent', onPressed: send, icon: Icons.send),
+  ]);
+}
+
+// ----- the SMS centre and the ledger ------------------------------------------------------
+
+@DVFunctionalWidget()
+Widget _smsLogScreen(BuildContext context) {
+  final DVSignal<Reply<Inbox>?> log = context.signal<Reply<Inbox>?>(null);
+  Future<Reply<Inbox>> fetch() => consoleSms(limit: 100, fromJson: Reply.of(Inbox.fromJson));
+  loadInto(log, fetch, every: const Duration(seconds: 3));
+  final Reply<Inbox>? reply = log.value;
+  final ColorScheme colors = Theme.of(context).colorScheme;
+  return Screen(<Widget>[
+    const PageTitle('SMS centre', subtitle: 'The latest 100 messages. Queued ones wait for the phone to come back on.'),
+    if (reply == null)
+      const Loading()
+    else if (!reply.ok)
+      Refusal(reply.message, onRetry: () => reload(log, fetch))
+    else
+      Panel(<Widget>[
+        for (final SmsMessage m in reply.result.messages)
+          DVBox.row(<Widget>[
+            Expanded(
+              child: DVBox.list(<Widget>[
+                DVText('${localNumber(m.from)} → ${localNumber(m.to)}').modifier(const DVModifier().fontWeight(FontWeight.w700)),
+                DVText(m.from == serviceNumber && m.text.contains('sign-in code') ? 'Sign-in code (hidden)' : m.text)
+                    .modifier(const DVModifier().color(colors.onSurfaceVariant)),
+              ], spacing: 2),
+            ),
+            Tag(m.state, warm: m.state != 'delivered', tooltip: '${m.segments} part${m.segments == 1 ? '' : 's'}, sent ${shortTime(m.submittedAt)}'),
+          ], spacing: 12, crossAlign: DVCrossAlign.center).modifier(const DVModifier().paddingSymmetric(vertical: 6)),
+      ], spacing: 2),
+  ], maxWidth: 1000);
+}
+
+@DVFunctionalWidget()
+Widget _ledgerScreen(BuildContext context) {
+  final DVSignal<Reply<LedgerPage>?> ledger = context.signal<Reply<LedgerPage>?>(null);
+  Future<Reply<LedgerPage>> fetch() => consoleLedger(limit: 100, fromJson: Reply.of(LedgerPage.fromJson));
+  loadInto(ledger, fetch, every: const Duration(seconds: 3));
+  final Reply<LedgerPage>? reply = ledger.value;
+  return Screen(<Widget>[
+    const PageTitle('Ledger', subtitle: 'The latest 100 balance changes. Every balance is the sum of its entries.'),
+    if (reply == null)
+      const Loading()
+    else if (!reply.ok)
+      Refusal(reply.message, onRetry: () => reload(ledger, fetch))
+    else
+      Panel(<Widget>[for (final LedgerEntry e in reply.result.entries) LedgerRow(entry: e, showLine: true)], spacing: 2),
+  ], maxWidth: 1000);
 }

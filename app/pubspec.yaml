@@ -1,7 +1,7 @@
 name: rtn_app
-description: RTN self-service and admin console, built with Dartvel.
+description: MyRTN, the self-service app for RTN lines, and the RTN operator console, built with Dartvel.
 publish_to: "none"
-version: 0.1.0
+version: 0.2.0
 
 environment:
   sdk: ">=3.13.0 <4.0.0"
@@ -17,16 +17,17 @@ dependencies:
     sdk: flutter
   go_router: ^14.2.0
   dio: ^5.5.0
+  ffi: ^2.1.0
   crypto: ^3.0.6
-  dartvel_core: ^0.12.1
-  dartvel_shelf: ^0.12.1
-  dartvel_flutter: ^0.12.1
+  dartvel_core: ^0.12.2
+  dartvel_shelf: ^0.12.2
+  dartvel_flutter: ^0.12.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   lints: ^4.0.0
-  dartvel_cli: ^0.12.1
+  dartvel_cli: ^0.12.2
 
 flutter:
   uses-material-design: true
@@ -49,32 +50,32 @@ dartvel:
     - web
     - android
   auth:
-    pages: false
+    # MyRTN signs in with a number and a code sent by SMS (lib/pages/signin.dart),
+    # not Dartvel's e-mail pages. Naming the page here is what lets the server
+    # send a signed-out visitor to it from a guarded page.
+    pages:
+      signIn: /signin
+      signUp: false
+      profile: false
+      security: false
+      sessions: false
+      delete: false
   admin:
     enabled: false
-
-hooks:
-  user_defines:
-    dartvel_shelf:
-      embed_server: true
-
   transitions:
     default: fade
     durationMs: 150
     curve: easeInOut
-
   pwa:
-    name: RTN
-    shortName: RTN
+    name: MyRTN
+    shortName: MyRTN
     icon: assets/icon.png
     themeColor: "#0F766E"
     backgroundColor: "#F7F5F2"
-
   splash:
     color: "#F7F5F2"
     darkColor: "#0E1414"
-
   seo:
-    siteName: RTN
-    defaultTitle: RTN
-    defaultDescription: Your RTN line, balance, bundles and USSD in one place.
+    siteName: MyRTN
+    defaultTitle: MyRTN
+    defaultDescription: Your RTN line in one place. Balance, data, recharge, transfers, loans and support.

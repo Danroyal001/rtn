@@ -1,8 +1,9 @@
-// POST /api/console/traffic: the live view.
+// POST /api/console/traffic: Live traffic and money totals.
 import 'package:dartvel_core/dartvel.dart';
 
-import '../../core.dart';
+import '../../../server/console.dart';
+import '../../../services/wire.dart';
 
-@DVBackendFunction()
-Future<Map<String, Object?>> _consoleTraffic(String session) => asConsole(
-    session, () => callCore('GET', '/v1/admin/traffic', asOperator: true));
+@DVBackendFunction(policy: 'OperatorConsole.view')
+Future<Reply<Traffic>> _consoleTraffic(DVContext ctx) =>
+    Console.shared.traffic();

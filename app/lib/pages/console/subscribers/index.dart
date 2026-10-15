@@ -1,17 +1,7 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 
 import '../../../dartvel_client/dartvel_client.dart';
-import '../../../components/console.dart';
-import '../../../components/ui.dart';
 
-@DVPage(
-  title: 'Console: subscribers',
-  description: 'RTN operator console: the subscriber registry.',
-  showAppBar: false,
-)
+@DVPage(title: 'Subscribers', description: 'Find, add and manage RTN subscribers.')
 @pragma('vm:entry-point')
-Widget _consoleSubscribersPage(BuildContext context) => PageFrame(children: <Widget>[
-      const PageHeading('Subscribers', subtitle: 'The registry: every line, its SIM, plan and balances.'),
-      const ConsoleTabs(),
-      ConsoleSignedIn(builder: (BuildContext context) => const SubscriberDirectory()),
-    ]);
+Widget _consoleSubscribersPage(BuildContext context) => const SubscribersScreen();

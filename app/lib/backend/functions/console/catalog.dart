@@ -1,8 +1,9 @@
-// POST /api/console/catalog: rating plans and bundles.
+// POST /api/console/catalog: Plans, bundles and rewards.
 import 'package:dartvel_core/dartvel.dart';
 
-import '../../core.dart';
+import '../../../server/console.dart';
+import '../../../services/wire.dart';
 
-@DVBackendFunction()
-Future<Map<String, Object?>> _consoleCatalog(String session) => asConsole(
-    session, () => callCore('GET', '/v1/admin/catalog', asOperator: true));
+@DVBackendFunction(policy: 'OperatorConsole.view')
+Future<Reply<Catalog>> _consoleCatalog(DVContext ctx) =>
+    Console.shared.catalog();

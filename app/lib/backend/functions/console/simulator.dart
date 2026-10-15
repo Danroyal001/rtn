@@ -1,12 +1,9 @@
-// POST /api/console/simulator: switch the traffic simulator on or off.
+// POST /api/console/simulator: Switches the traffic simulator on or off.
 import 'package:dartvel_core/dartvel.dart';
 
-import '../../core.dart';
+import '../../../server/console.dart';
+import '../../../services/wire.dart';
 
-@DVBackendFunction()
-Future<Map<String, Object?>> _consoleSimulator(String session, bool running) =>
-    asConsole(
-      session,
-      () => callCore('PATCH', '/v1/admin/simulator',
-          asOperator: true, body: <String, Object?>{'running': running}),
-    );
+@DVBackendFunction(policy: 'OperatorConsole.update')
+Future<Reply<Done>> _consoleSimulator(DVContext ctx, bool running) =>
+    Console.shared.setSimulator(running);

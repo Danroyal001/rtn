@@ -1,8 +1,9 @@
-// POST /api/console/ledger: the latest ledger entries across the network.
+// POST /api/console/ledger: The network's latest ledger entries.
 import 'package:dartvel_core/dartvel.dart';
 
-import '../../core.dart';
+import '../../../server/console.dart';
+import '../../../services/wire.dart';
 
-@DVBackendFunction()
-Future<Map<String, Object?>> _consoleLedger(String session) => asConsole(
-    session, () => callCore('GET', '/v1/admin/ledger?limit=30', asOperator: true));
+@DVBackendFunction(policy: 'OperatorConsole.view')
+Future<Reply<LedgerPage>> _consoleLedger(DVContext ctx, int limit) =>
+    Console.shared.ledger(limit);
