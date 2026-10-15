@@ -6,5 +6,4 @@ import '../../../server/signed_in.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'SubscriberLine.update')
-Future<Reply<Line>> _swapSim(DVContext ctx, String pin) =>
-    SelfCare.shared.swapSim(me(ctx), pin);
+Future<Reply<Line>> _swapSim(DVContext ctx, String pin) => SelfCare.shared.swapSim(me(ctx), pin);

@@ -31,22 +31,26 @@ Future<Reply<SignedIn>> _adopt(Reply<SignedIn> who) async {
 // only calls in the app that name their fields.
 
 /// Checks a subscriber's sign-in code and starts their session here.
-Future<Reply<SignedIn>> signInWithCode(String msisdn, String code) => ask(() async => _adopt(
-      await postSignInVerifyCodeAs<Reply<SignedIn>>(
-        Reply.of(SignedIn.fromJson),
-        body: <String, Object?>{'msisdn': msisdn, 'code': code},
-        headers: kIsWeb ? null : _delivery,
-      ),
-    ));
+Future<Reply<SignedIn>> signInWithCode(String msisdn, String code) => ask(
+  () async => _adopt(
+    await postSignInVerifyCodeAs<Reply<SignedIn>>(
+      Reply.of(SignedIn.fromJson),
+      body: <String, Object?>{'msisdn': msisdn, 'code': code},
+      headers: kIsWeb ? null : _delivery,
+    ),
+  ),
+);
 
 /// Checks the console password and starts an operator session here.
-Future<Reply<SignedIn>> signInToConsole(String password) => ask(() async => _adopt(
-      await postSignInConsoleAs<Reply<SignedIn>>(
-        Reply.of(SignedIn.fromJson),
-        body: <String, Object?>{'password': password},
-        headers: kIsWeb ? null : _delivery,
-      ),
-    ));
+Future<Reply<SignedIn>> signInToConsole(String password) => ask(
+  () async => _adopt(
+    await postSignInConsoleAs<Reply<SignedIn>>(
+      Reply.of(SignedIn.fromJson),
+      body: <String, Object?>{'password': password},
+      headers: kIsWeb ? null : _delivery,
+    ),
+  ),
+);
 
 /// Ends the session on the server and forgets it here.
 Future<void> signOut() async {

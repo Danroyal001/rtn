@@ -9,6 +9,7 @@
 //
 // Pure Dart: imported by backend functions and by pages, so no Flutter and no
 // dart:io here.
+import 'money.dart';
 
 /// Reads one JSON object without trusting its shape.
 final class _In {
@@ -17,38 +18,43 @@ final class _In {
   final Map<Object?, Object?> _m;
 
   String str(String key) => switch (_m[key]) {
-        final String s => s,
-        null => '',
-        final Object other => '$other',
-      };
+    final String s => s,
+    null => '',
+    final Object other => '$other',
+  };
+
+  /// Words the network wrote for a person to read, with its numbers in the
+  /// local form.
+  String words(String key) => readable(str(key));
 
   String? maybe(String key) => _m[key] == null ? null : str(key);
 
   int integer(String key) => switch (_m[key]) {
-        final int i => i,
-        final num n => n.toInt(),
-        final String s => int.tryParse(s) ?? 0,
-        _ => 0,
-      };
+    final int i => i,
+    final num n => n.toInt(),
+    final String s => int.tryParse(s) ?? 0,
+    _ => 0,
+  };
 
   bool flag(String key) => _m[key] == true;
 
   List<T> list<T>(String key, T Function(Object?) read) => <T>[
-        for (final Object? item in _m[key] is List ? _m[key]! as List : const <Object?>[]) read(item),
-      ];
+    for (final Object? item in _m[key] is List ? _m[key]! as List : const <Object?>[]) read(item),
+  ];
 
   /// A JSON object whose values are all of one type, as a list of them.
   List<T> values<T>(String key, T Function(Object?) read) => <T>[
-        for (final Object? item in _m[key] is Map ? (_m[key]! as Map).values : const <Object?>[]) read(item),
-      ];
+    for (final Object? item in _m[key] is Map ? (_m[key]! as Map).values : const <Object?>[]) read(item),
+  ];
 
   T? optional<T>(String key, T Function(Object?) read) => _m[key] == null ? null : read(_m[key]);
 
   T one<T>(String key, T Function(Object?) read) => read(_m[key]);
 }
 
-List<Object?> _all(Iterable<Object?> items) =>
-    <Object?>[for (final Object? item in items) item is _Wire ? item.toJson() : item];
+List<Object?> _all(Iterable<Object?> items) => <Object?>[
+  for (final Object? item in items) item is _Wire ? item.toJson() : item,
+];
 
 abstract interface class _Wire {
   Map<String, Object?> toJson();
@@ -62,9 +68,7 @@ abstract interface class _Wire {
 /// exception into a bare 500, and a refusal ("not enough airtime") is an
 /// answer, not a failure.
 final class Reply<T> implements _Wire {
-  const Reply.ok(T this.value)
-      : code = '',
-        message = '';
+  const Reply.ok(T this.value) : code = '', message = '';
 
   const Reply.refused(this.code, this.message) : value = null;
 
@@ -79,10 +83,10 @@ final class Reply<T> implements _Wire {
 
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'value': value is _Wire ? (value! as _Wire).toJson() : value,
-        'code': code,
-        'message': message,
-      };
+    'value': value is _Wire ? (value! as _Wire).toJson() : value,
+    'code': code,
+    'message': message,
+  };
 
   /// Reads a reply. Anything that is not one (the generated client hands over
   /// the body of a 401 or a 500 as it is) is a refusal, never an empty value.
@@ -99,7 +103,7 @@ final class Reply<T> implements _Wire {
     }
     final _In m = _In(data);
     final String code = m.str('code');
-    return code.isEmpty ? Reply<T>.ok(m.one('value', read)) : Reply<T>.refused(code, m.str('message'));
+    return code.isEmpty ? Reply<T>.ok(m.one('value', read)) : Reply<T>.refused(code, m.words('message'));
   }
 
   /// The `fromJson` a generated client function asks for:
@@ -117,7 +121,7 @@ class const Done({final String message = ''}) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{'message': message};
 
-  static Done fromJson(Object? data) => Done(message: _In(data).str('message'));
+  static Done fromJson(Object? data) => Done(message: _In(data).words('message'));
 }
 
 // ----- the catalogue ---------------------------------------------------------------------
@@ -131,12 +135,12 @@ class const Plan({
 }) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'id': id,
-        'name': name,
-        'voice_per_second': voicePerSecond,
-        'sms_per_segment': smsPerSegment,
-        'data_per_mb': dataPerMb,
-      };
+    'id': id,
+    'name': name,
+    'voice_per_second': voicePerSecond,
+    'sms_per_segment': smsPerSegment,
+    'data_per_mb': dataPerMb,
+  };
 
   static Plan fromJson(Object? data) {
     final _In m = _In(data);
@@ -160,13 +164,13 @@ class const Bundle({
 }) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'id': id,
-        'name': name,
-        'data_bytes': dataBytes,
-        'price': price,
-        'validity_days': validityDays,
-        if (offer != null) 'offer': offer,
-      };
+    'id': id,
+    'name': name,
+    'data_bytes': dataBytes,
+    'price': price,
+    'validity_days': validityDays,
+    if (offer != null) 'offer': offer,
+  };
 
   static Bundle fromJson(Object? data) {
     final _In m = _In(data);
@@ -190,12 +194,12 @@ class const Reward({
 }) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'id': id,
-        'name': name,
-        'points': points,
-        'data_bytes': dataBytes,
-        'validity_days': validityDays,
-      };
+    'id': id,
+    'name': name,
+    'points': points,
+    'data_bytes': dataBytes,
+    'validity_days': validityDays,
+  };
 
   static Reward fromJson(Object? data) {
     final _In m = _In(data);
@@ -219,11 +223,11 @@ class const Catalog({
 
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'plans': <String, Object?>{for (final Plan p in plans) p.id: p.toJson()},
-        'bundles': _all(bundles),
-        'rewards': _all(rewards),
-        'default_plan': defaultPlan,
-      };
+    'plans': <String, Object?>{for (final Plan p in plans) p.id: p.toJson()},
+    'bundles': _all(bundles),
+    'rewards': _all(rewards),
+    'default_plan': defaultPlan,
+  };
 
   static Catalog fromJson(Object? data) {
     final _In m = _In(data);
@@ -245,14 +249,18 @@ class const HeldBundle({
   final int expiresAt = 0,
 }) implements _Wire {
   @override
-  Map<String, Object?> toJson() =>
-      <String, Object?>{'bundle_id': bundleId, 'name': name, 'bytes_left': bytesLeft, 'expires_at': expiresAt};
+  Map<String, Object?> toJson() => <String, Object?>{
+    'bundle_id': bundleId,
+    'name': name,
+    'bytes_left': bytesLeft,
+    'expires_at': expiresAt,
+  };
 
   static HeldBundle fromJson(Object? data) {
     final _In m = _In(data);
     return HeldBundle(
       bundleId: m.str('bundle_id'),
-      name: m.str('name'),
+      name: m.words('name'),
       bytesLeft: m.integer('bytes_left'),
       expiresAt: m.integer('expires_at'),
     );
@@ -274,18 +282,18 @@ class const Balance({
 }) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'msisdn': msisdn,
-        'plan_id': planId,
-        'status': status,
-        'airtime': airtime,
-        'reserved': reserved,
-        'available': available,
-        'data_bytes': dataBytes,
-        'bundles': _all(bundles),
-        'loan': loan,
-        'loan_limit': loanLimit,
-        'points': points,
-      };
+    'msisdn': msisdn,
+    'plan_id': planId,
+    'status': status,
+    'airtime': airtime,
+    'reserved': reserved,
+    'available': available,
+    'data_bytes': dataBytes,
+    'bundles': _all(bundles),
+    'loan': loan,
+    'loan_limit': loanLimit,
+    'points': points,
+  };
 
   static Balance fromJson(Object? data) {
     final _In m = _In(data);
@@ -319,15 +327,15 @@ class const Subscriber({
 
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'msisdn': msisdn,
-        'imsi': imsi,
-        'name': name,
-        'plan_id': planId,
-        'status': status,
-        'attached': attached,
-        'loan_limit': loanLimit,
-        'created_at': createdAt,
-      };
+    'msisdn': msisdn,
+    'imsi': imsi,
+    'name': name,
+    'plan_id': planId,
+    'status': status,
+    'attached': attached,
+    'loan_limit': loanLimit,
+    'created_at': createdAt,
+  };
 
   static Subscriber fromJson(Object? data) {
     final _In m = _In(data);
@@ -348,8 +356,11 @@ class const Subscriber({
 class const Line({required final Subscriber subscriber, final Plan? plan, required final Balance balance})
     implements _Wire {
   @override
-  Map<String, Object?> toJson() =>
-      <String, Object?>{'subscriber': subscriber.toJson(), 'plan': plan?.toJson(), 'balance': balance.toJson()};
+  Map<String, Object?> toJson() => <String, Object?>{
+    'subscriber': subscriber.toJson(),
+    'plan': plan?.toJson(),
+    'balance': balance.toJson(),
+  };
 
   static Line fromJson(Object? data) {
     final _In m = _In(data);
@@ -380,21 +391,21 @@ class const LedgerEntry({
 }) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'seq': seq,
-        'at': at,
-        'request_id': requestId,
-        'msisdn': msisdn,
-        'kind': kind,
-        'airtime_delta': airtimeDelta,
-        'data_delta': dataDelta,
-        'loan_delta': loanDelta,
-        'airtime_after': airtimeAfter,
-        'data_after': dataAfter,
-        'loan_after': loanAfter,
-        'points_delta': pointsDelta,
-        'points_after': pointsAfter,
-        'note': note,
-      };
+    'seq': seq,
+    'at': at,
+    'request_id': requestId,
+    'msisdn': msisdn,
+    'kind': kind,
+    'airtime_delta': airtimeDelta,
+    'data_delta': dataDelta,
+    'loan_delta': loanDelta,
+    'airtime_after': airtimeAfter,
+    'data_after': dataAfter,
+    'loan_after': loanAfter,
+    'points_delta': pointsDelta,
+    'points_after': pointsAfter,
+    'note': note,
+  };
 
   static LedgerEntry fromJson(Object? data) {
     final _In m = _In(data);
@@ -412,7 +423,7 @@ class const LedgerEntry({
       loanAfter: m.integer('loan_after'),
       pointsDelta: m.integer('points_delta'),
       pointsAfter: m.integer('points_after'),
-      note: m.str('note'),
+      note: m.words('note'),
     );
   }
 }
@@ -445,22 +456,22 @@ class const OutcomeDetail({
 }) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'type': type,
-        'repaid': repaid,
-        'bundle_id': bundleId,
-        'expires_at': expiresAt,
-        'beneficiary': beneficiary,
-        'to': to,
-        'amount': amount,
-        'fee': fee,
-        'borrowed': borrowed,
-        'owed': owed,
-        'serial': serial,
-        'bytes': bytes,
-        'reward_id': rewardId,
-        'data_bytes': dataBytes,
-        'points': points,
-      };
+    'type': type,
+    'repaid': repaid,
+    'bundle_id': bundleId,
+    'expires_at': expiresAt,
+    'beneficiary': beneficiary,
+    'to': to,
+    'amount': amount,
+    'fee': fee,
+    'borrowed': borrowed,
+    'owed': owed,
+    'serial': serial,
+    'bytes': bytes,
+    'reward_id': rewardId,
+    'data_bytes': dataBytes,
+    'points': points,
+  };
 
   static OutcomeDetail fromJson(Object? data) {
     final _In m = _In(data);
@@ -495,12 +506,12 @@ class const Outcome({
 }) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'request_id': requestId,
-        'charged': charged,
-        'balance': balance.toJson(),
-        'detail': detail.toJson(),
-        'reference': reference,
-      };
+    'request_id': requestId,
+    'charged': charged,
+    'balance': balance.toJson(),
+    'detail': detail.toJson(),
+    'reference': reference,
+  };
 
   static Outcome fromJson(Object? data) {
     final _In m = _In(data);
@@ -528,15 +539,15 @@ class const SmsMessage({
 }) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'id': id,
-        'from': from,
-        'to': to,
-        'text': text,
-        'segments': segments,
-        'submitted_at': submittedAt,
-        'state': state,
-        'read': read,
-      };
+    'id': id,
+    'from': from,
+    'to': to,
+    'text': text,
+    'segments': segments,
+    'submitted_at': submittedAt,
+    'state': state,
+    'read': read,
+  };
 
   static SmsMessage fromJson(Object? data) {
     final _In m = _In(data);
@@ -544,7 +555,7 @@ class const SmsMessage({
       id: m.str('id'),
       from: m.str('from'),
       to: m.str('to'),
-      text: m.str('text'),
+      text: m.words('text'),
       segments: m.integer('segments'),
       submittedAt: m.integer('submitted_at'),
       state: m.str('state'),
@@ -583,7 +594,7 @@ class const CareMessage({final int at = 0, final String author = 'subscriber', f
 
   static CareMessage fromJson(Object? data) {
     final _In m = _In(data);
-    return CareMessage(at: m.integer('at'), author: m.str('author'), text: m.str('text'));
+    return CareMessage(at: m.integer('at'), author: m.str('author'), text: m.words('text'));
   }
 }
 
@@ -608,13 +619,13 @@ class const CareThread({
 }) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'msisdn': msisdn,
-        'name': name,
-        'messages': messages,
-        'last_at': lastAt,
-        'last_text': lastText,
-        'waiting': waiting,
-      };
+    'msisdn': msisdn,
+    'name': name,
+    'messages': messages,
+    'last_at': lastAt,
+    'last_text': lastText,
+    'waiting': waiting,
+  };
 
   static CareThread fromJson(Object? data) {
     final _In m = _In(data);
@@ -642,7 +653,7 @@ class const UssdReply({final String text = '', final bool end = true}) implement
 
   static UssdReply fromJson(Object? data) {
     final _In m = _In(data);
-    return UssdReply(text: m.str('text'), end: m.flag('end'));
+    return UssdReply(text: m.words('text'), end: m.flag('end'));
   }
 }
 
@@ -663,11 +674,19 @@ class const CodeSent({required final String msisdn, final int expiresAt = 0, fin
 
 /// Who a new session belongs to. The session itself travels as a cookie (or,
 /// on a device, as [token]).
-class const SignedIn({required final String userId, final String name = '', final String role = '', final String token = ''})
-    implements _Wire {
+class const SignedIn({
+  required final String userId,
+  final String name = '',
+  final String role = '',
+  final String token = '',
+}) implements _Wire {
   @override
-  Map<String, Object?> toJson() =>
-      <String, Object?>{'user_id': userId, 'name': name, 'role': role, if (token.isNotEmpty) 'token': token};
+  Map<String, Object?> toJson() => <String, Object?>{
+    'user_id': userId,
+    'name': name,
+    'role': role,
+    if (token.isNotEmpty) 'token': token,
+  };
 
   static SignedIn fromJson(Object? data) {
     final _In m = _In(data);
@@ -685,11 +704,11 @@ class const Dashboard({
 }) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'line': line.toJson(),
-        'unread': unread,
-        'recent': _all(recent),
-        'offers': _all(offers),
-      };
+    'line': line.toJson(),
+    'unread': unread,
+    'recent': _all(recent),
+    'offers': _all(offers),
+  };
 
   static Dashboard fromJson(Object? data) {
     final _In m = _In(data);
@@ -726,14 +745,14 @@ class const TrafficCounters({
 }) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'data_bytes': dataBytes,
-        'voice_seconds': voiceSeconds,
-        'sms': sms,
-        'ussd': ussd,
-        'charges': charges,
-        'revenue': revenue,
-        'failures': failures,
-      };
+    'data_bytes': dataBytes,
+    'voice_seconds': voiceSeconds,
+    'sms': sms,
+    'ussd': ussd,
+    'charges': charges,
+    'revenue': revenue,
+    'failures': failures,
+  };
 
   static TrafficCounters fromJson(Object? data) {
     final _In m = _In(data);
@@ -752,8 +771,12 @@ class const TrafficCounters({
 class const Totals({final int toppedUp = 0, final int lent = 0, final int repaid = 0, final int revenue = 0})
     implements _Wire {
   @override
-  Map<String, Object?> toJson() =>
-      <String, Object?>{'topped_up': toppedUp, 'lent': lent, 'repaid': repaid, 'revenue': revenue};
+  Map<String, Object?> toJson() => <String, Object?>{
+    'topped_up': toppedUp,
+    'lent': lent,
+    'repaid': repaid,
+    'revenue': revenue,
+  };
 
   static Totals fromJson(Object? data) {
     final _In m = _In(data);
@@ -784,19 +807,19 @@ class const Traffic({
 }) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'at': at,
-        'totals': totals.toJson(),
-        'series_from': seriesFrom,
-        'series': _all(series),
-        'subscribers': subscribers,
-        'active_subscribers': activeSubscribers,
-        'attached': attached,
-        'active_calls': activeCalls,
-        'queued_sms': queuedSms,
-        'ussd_sessions': ussdSessions,
-        'money': money.toJson(),
-        'simulating': simulating,
-      };
+    'at': at,
+    'totals': totals.toJson(),
+    'series_from': seriesFrom,
+    'series': _all(series),
+    'subscribers': subscribers,
+    'active_subscribers': activeSubscribers,
+    'attached': attached,
+    'active_calls': activeCalls,
+    'queued_sms': queuedSms,
+    'ussd_sessions': ussdSessions,
+    'money': money.toJson(),
+    'simulating': simulating,
+  };
 
   static Traffic fromJson(Object? data) {
     final _In m = _In(data);
@@ -830,8 +853,11 @@ class const SubscriberRow({required final Subscriber subscriber, required final 
   }
 }
 
-class const SubscriberPage({final int total = 0, final int offset = 0, final List<SubscriberRow> items = const <SubscriberRow>[]})
-    implements _Wire {
+class const SubscriberPage({
+  final int total = 0,
+  final int offset = 0,
+  final List<SubscriberRow> items = const <SubscriberRow>[],
+}) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{'total': total, 'offset': offset, 'items': _all(items)};
 
@@ -854,11 +880,11 @@ class const SubscriberFile({
 }) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'line': line.toJson(),
-        'history': _all(history),
-        'inbox': _all(inbox),
-        'plans': _all(plans),
-      };
+    'line': line.toJson(),
+    'history': _all(history),
+    'inbox': _all(inbox),
+    'plans': _all(plans),
+  };
 
   static SubscriberFile fromJson(Object? data) {
     final _In m = _In(data);
@@ -880,12 +906,12 @@ class const Voucher({
 }) implements _Wire {
   @override
   Map<String, Object?> toJson() => <String, Object?>{
-        'serial': serial,
-        'amount': amount,
-        'created_at': createdAt,
-        'used_by': usedBy,
-        'used_at': usedAt,
-      };
+    'serial': serial,
+    'amount': amount,
+    'created_at': createdAt,
+    'used_by': usedBy,
+    'used_at': usedAt,
+  };
 
   static Voucher fromJson(Object? data) {
     final _In m = _In(data);

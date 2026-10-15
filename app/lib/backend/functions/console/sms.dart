@@ -5,5 +5,4 @@ import '../../../server/console.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'OperatorConsole.view')
-Future<Reply<Inbox>> _consoleSms(DVContext ctx, int limit) =>
-    Console.shared.smsLog(limit);
+Future<Reply<Inbox>> _consoleSms(DVContext ctx, int limit) => Console.shared.smsLog(limit);

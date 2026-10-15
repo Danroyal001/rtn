@@ -32,7 +32,9 @@ final class SelfCare {
   /// scoped to the line, so a retry is recognised and two lines never clash.
   static String requestId(String msisdn, String given) {
     final String trimmed = given.trim();
-    final String id = trimmed.isEmpty || trimmed.length > 64 ? DateTime.now().microsecondsSinceEpoch.toString() : trimmed;
+    final String id = trimmed.isEmpty || trimmed.length > 64
+        ? DateTime.now().microsecondsSinceEpoch.toString()
+        : trimmed;
     return 'app:$msisdn:$id';
   }
 
@@ -46,8 +48,7 @@ final class SelfCare {
   }
 
   /// The beneficiary of an action: [typed] when given, else the line itself.
-  static String? _target(String msisdn, String typed) =>
-      typed.trim().isEmpty ? msisdn : internationalNumber(typed);
+  static String? _target(String msisdn, String typed) => typed.trim().isEmpty ? msisdn : internationalNumber(typed);
 
   // ----- signing in ----------------------------------------------------------------------
 
@@ -61,10 +62,10 @@ final class SelfCare {
     final Reply<Inbox> log = await core.smsLog(50);
     final String code = log.ok
         ? log.result.messages
-                .where((SmsMessage m) => m.to == msisdn && m.from == serviceNumber && m.text.contains('sign-in code'))
-                .map((SmsMessage m) => m.text.substring(0, 6))
-                .firstOrNull ??
-            ''
+                  .where((SmsMessage m) => m.to == msisdn && m.from == serviceNumber && m.text.contains('sign-in code'))
+                  .map((SmsMessage m) => m.text.substring(0, 6))
+                  .firstOrNull ??
+              ''
         : '';
     return Reply<CodeSent>.ok(CodeSent(msisdn: msisdn, expiresAt: sent.result.expiresAt, demoCode: code));
   }
@@ -79,6 +80,13 @@ final class SelfCare {
     return Reply<SignedIn>.ok(SignedIn(userId: msisdn, name: who.ok ? who.result.name : '', role: 'subscriber'));
   }
 
+  /// "50 subscribers", or why the network cannot be read.
+  Future<Reply<Done>> status() async {
+    final Reply<SubscriberPage> page = await core.subscriberPage('', 0, 1);
+    if (!page.ok) return Reply<Done>.refused(page.code, page.message);
+    return Reply<Done>.ok(Done(message: '${page.result.total} subscribers'));
+  }
+
   // ----- reading the line ----------------------------------------------------------------
 
   Future<Reply<Line>> line(String msisdn) => core.line(msisdn);
@@ -89,12 +97,14 @@ final class SelfCare {
     final Reply<Inbox> notes = await core.notifications(msisdn);
     final Reply<LedgerPage> recent = await core.history(msisdn, 4);
     final Reply<Catalog> catalog = await core.catalog();
-    return Reply<Dashboard>.ok(Dashboard(
-      line: line.result,
-      unread: notes.ok ? notes.result.unread : 0,
-      recent: recent.ok ? recent.result.entries : const <LedgerEntry>[],
-      offers: catalog.ok ? catalog.result.bundles.where((Bundle b) => b.offer != null).toList() : const <Bundle>[],
-    ));
+    return Reply<Dashboard>.ok(
+      Dashboard(
+        line: line.result,
+        unread: notes.ok ? notes.result.unread : 0,
+        recent: recent.ok ? recent.result.entries : const <LedgerEntry>[],
+        offers: catalog.ok ? catalog.result.bundles.where((Bundle b) => b.offer != null).toList() : const <Bundle>[],
+      ),
+    );
   }
 
   Future<Reply<Catalog>> catalog() => core.catalog();
@@ -113,10 +123,9 @@ final class SelfCare {
     final Reply<Line> line = await core.line(msisdn);
     if (!line.ok) return Reply<Loyalty>.refused(line.code, line.message);
     final Reply<Catalog> catalog = await core.catalog();
-    return Reply<Loyalty>.ok(Loyalty(
-      points: line.result.balance.points,
-      rewards: catalog.ok ? catalog.result.rewards : const <Reward>[],
-    ));
+    return Reply<Loyalty>.ok(
+      Loyalty(points: line.result.balance.points, rewards: catalog.ok ? catalog.result.rewards : const <Reward>[]),
+    );
   }
 
   Future<Reply<Inbox>> notifications(String msisdn) async {
@@ -131,10 +140,17 @@ final class SelfCare {
     final Reply<Inbox> inbox = await core.inbox(msisdn);
     final Reply<Inbox> outbox = await core.outbox(msisdn);
     if (!inbox.ok) return Reply<Messages>.refused(inbox.code, inbox.message);
-    return Reply<Messages>.ok(Messages(
-      inbox: inbox.result.messages.where((SmsMessage m) => m.from != serviceNumber).toList().reversed.take(50).toList(),
-      sent: outbox.ok ? outbox.result.messages.reversed.take(50).toList() : const <SmsMessage>[],
-    ));
+    return Reply<Messages>.ok(
+      Messages(
+        inbox: inbox.result.messages
+            .where((SmsMessage m) => m.from != serviceNumber)
+            .toList()
+            .reversed
+            .take(50)
+            .toList(),
+        sent: outbox.ok ? outbox.result.messages.reversed.take(50).toList() : const <SmsMessage>[],
+      ),
+    );
   }
 
   // ----- buying and moving money ---------------------------------------------------------
@@ -153,8 +169,11 @@ final class SelfCare {
   Future<Reply<Outcome>> rechargeVoucher(String msisdn, String pin, String forNumber, String attempt) async {
     final String? target = _target(msisdn, forNumber);
     if (target == null) return _bad('invalid_msisdn', 'That is not a phone number.');
-    return core.apply(
-        requestId(msisdn, attempt), <String, Object?>{'type': 'redeem_voucher', 'msisdn': target, 'pin': pin});
+    return core.apply(requestId(msisdn, attempt), <String, Object?>{
+      'type': 'redeem_voucher',
+      'msisdn': target,
+      'pin': pin,
+    });
   }
 
   Future<Reply<Outcome>> rechargeCard(
@@ -183,13 +202,15 @@ final class SelfCare {
     });
     if (!topped.ok) return topped;
     final Outcome o = topped.result;
-    return Reply<Outcome>.ok(Outcome(
-      requestId: o.requestId,
-      charged: amount,
-      balance: o.balance,
-      detail: OutcomeDetail(type: 'card', amount: amount, repaid: o.detail.repaid, to: target),
-      reference: payment.reference,
-    ));
+    return Reply<Outcome>.ok(
+      Outcome(
+        requestId: o.requestId,
+        charged: amount,
+        balance: o.balance,
+        detail: OutcomeDetail(type: 'card', amount: amount, repaid: o.detail.repaid, to: target),
+        reference: payment.reference,
+      ),
+    );
   }
 
   Future<Reply<Outcome>> transfer(String msisdn, String to, String amountTyped, String pin, String attempt) async {
@@ -200,8 +221,12 @@ final class SelfCare {
     if (amount == null || amount == 0) return _bad('invalid_amount', 'Enter an amount in naira, like 500.');
     final Reply<Done> pinOk = await core.verifyPin(msisdn, pin);
     if (!pinOk.ok) return Reply<Outcome>.refused(pinOk.code, pinOk.message);
-    return core.apply(requestId(msisdn, attempt),
-        <String, Object?>{'type': 'transfer', 'from': msisdn, 'to': number, 'amount': amount});
+    return core.apply(requestId(msisdn, attempt), <String, Object?>{
+      'type': 'transfer',
+      'from': msisdn,
+      'to': number,
+      'amount': amount,
+    });
   }
 
   Future<Reply<Outcome>> shareData(String msisdn, String to, String megabytesTyped, String pin, String attempt) async {
@@ -212,25 +237,39 @@ final class SelfCare {
     if (bytes == null) return _bad('invalid_amount', 'Enter whole megabytes, like 500.');
     final Reply<Done> pinOk = await core.verifyPin(msisdn, pin);
     if (!pinOk.ok) return Reply<Outcome>.refused(pinOk.code, pinOk.message);
-    return core.apply(requestId(msisdn, attempt),
-        <String, Object?>{'type': 'share_data', 'from': msisdn, 'to': number, 'bytes': bytes});
+    return core.apply(requestId(msisdn, attempt), <String, Object?>{
+      'type': 'share_data',
+      'from': msisdn,
+      'to': number,
+      'bytes': bytes,
+    });
   }
 
   Future<Reply<Outcome>> borrow(String msisdn, String amountTyped, String attempt) async {
     final int? amount = parseNaira(amountTyped);
     if (amount == null || amount == 0) return _bad('invalid_amount', 'Choose how much to borrow.');
-    return core.apply(requestId(msisdn, attempt), <String, Object?>{'type': 'borrow', 'msisdn': msisdn, 'amount': amount});
+    return core.apply(requestId(msisdn, attempt), <String, Object?>{
+      'type': 'borrow',
+      'msisdn': msisdn,
+      'amount': amount,
+    });
   }
 
   Future<Reply<Outcome>> redeem(String msisdn, String rewardId, String attempt) => core.apply(
-      requestId(msisdn, attempt), <String, Object?>{'type': 'redeem_points', 'msisdn': msisdn, 'reward_id': rewardId});
+    requestId(msisdn, attempt),
+    <String, Object?>{'type': 'redeem_points', 'msisdn': msisdn, 'reward_id': rewardId},
+  );
 
   Future<Reply<Outcome>> sendSms(String msisdn, String to, String text, String attempt) async {
     String? number;
     final Reply<Outcome>? bad = _number(to, (String n) => number = n);
     if (bad != null) return bad;
-    return core.apply(requestId(msisdn, attempt),
-        <String, Object?>{'type': 'sms_submit', 'from': msisdn, 'to': number, 'text': text});
+    return core.apply(requestId(msisdn, attempt), <String, Object?>{
+      'type': 'sms_submit',
+      'from': msisdn,
+      'to': number,
+      'text': text,
+    });
   }
 
   // ----- care and USSD -------------------------------------------------------------------

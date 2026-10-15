@@ -5,5 +5,4 @@ import '../../../server/console.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'OperatorConsole.view')
-Future<Reply<Traffic>> _consoleTraffic(DVContext ctx) =>
-    Console.shared.traffic();
+Future<Reply<Traffic>> _consoleTraffic(DVContext ctx) => Console.shared.traffic();

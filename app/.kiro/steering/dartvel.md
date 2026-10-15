@@ -1,10 +1,10 @@
 # Dartvel working rules
 
 <!-- dartvel:begin agents -->
-<!-- Written by `dartvel dev`, matched to Dartvel 0.12.1.
+<!-- Written by `dartvel dev`, matched to Dartvel 0.12.2.
      Edits inside this block are replaced; text outside it is kept. -->
 
-## Dartvel 0.12.1
+## Dartvel 0.12.2
 
 # Dartvel working rules
 
@@ -156,12 +156,4 @@ carriers for model sync, `DVModelSync`, `DVSemanticIndex`, `DVOfflineRemote`,
 `DVCacheRuntime`, the lifecycle registries behind `DV.lifecycle`, the worker
 behind `DV.Jobs.work(...)`, and the platform bindings that report connectivity.
 An application reads the signal and waits; it does not drive the machinery.
-
-## Where to read more
-
-The documentation for this exact version ships with it, at:
-
-    /home/sigmadev/dartvel_dev/packages/dartvel_cli/docs
-
-Read it before adding anything: it describes the API as this version has it, which is not always what the newest website says.
 <!-- dartvel:end agents -->

@@ -5,5 +5,4 @@ import '../../../server/console.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'OperatorConsole.view')
-Future<Reply<LedgerPage>> _consoleLedger(DVContext ctx, int limit) =>
-    Console.shared.ledger(limit);
+Future<Reply<LedgerPage>> _consoleLedger(DVContext ctx, int limit) => Console.shared.ledger(limit);

@@ -61,12 +61,14 @@ final class Console {
     final Reply<LedgerPage> history = await core.history(msisdn, 30);
     final Reply<Inbox> inbox = await core.inbox(msisdn);
     final Reply<Catalog> catalog = await core.catalog();
-    return Reply<SubscriberFile>.ok(SubscriberFile(
-      line: line.result,
-      history: history.ok ? history.result.entries : const <LedgerEntry>[],
-      inbox: inbox.ok ? inbox.result.messages.reversed.take(20).toList() : const <SmsMessage>[],
-      plans: catalog.ok ? catalog.result.plans : const <Plan>[],
-    ));
+    return Reply<SubscriberFile>.ok(
+      SubscriberFile(
+        line: line.result,
+        history: history.ok ? history.result.entries : const <LedgerEntry>[],
+        inbox: inbox.ok ? inbox.result.messages.reversed.take(20).toList() : const <SmsMessage>[],
+        plans: catalog.ok ? catalog.result.plans : const <Plan>[],
+      ),
+    );
   }
 
   Future<Reply<Subscriber>> addSubscriber(String typed, String name, String pin, String planId) async {
@@ -113,25 +115,36 @@ final class Console {
       return Future<Reply<Done>>.value(_bad('invalid_amount', 'Rates are whole kobo, like 20.'));
     }
     return core.upsertPlan(
-        Plan(id: id.trim(), name: name.trim(), voicePerSecond: voice, smsPerSegment: sms, dataPerMb: data));
+      Plan(id: id.trim(), name: name.trim(), voicePerSecond: voice, smsPerSegment: sms, dataPerMb: data),
+    );
   }
 
-  Future<Reply<Done>> saveBundle(String id, String name, String megabytesTyped, String priceTyped, String days, String offer) {
+  Future<Reply<Done>> saveBundle(
+    String id,
+    String name,
+    String megabytesTyped,
+    String priceTyped,
+    String days,
+    String offer,
+  ) {
     final int? bytes = megabytes(megabytesTyped);
     final int? price = parseNaira(priceTyped);
     final int? validity = int.tryParse(days.trim());
     if (bytes == null || price == null || validity == null) {
       return Future<Reply<Done>>.value(
-          _bad('invalid_amount', 'A bundle needs whole megabytes, a price in naira and a validity in days.'));
+        _bad('invalid_amount', 'A bundle needs whole megabytes, a price in naira and a validity in days.'),
+      );
     }
-    return core.upsertBundle(Bundle(
-      id: id.trim(),
-      name: name.trim(),
-      dataBytes: bytes,
-      price: price,
-      validityDays: validity,
-      offer: offer.trim().isEmpty ? null : offer.trim(),
-    ));
+    return core.upsertBundle(
+      Bundle(
+        id: id.trim(),
+        name: name.trim(),
+        dataBytes: bytes,
+        price: price,
+        validityDays: validity,
+        offer: offer.trim().isEmpty ? null : offer.trim(),
+      ),
+    );
   }
 
   // ----- vouchers ------------------------------------------------------------------------
@@ -151,7 +164,8 @@ final class Console {
     if (!printed.ok) return Reply<VoucherBook>.refused(printed.code, printed.message);
     final Reply<List<Voucher>> list = await core.vouchers(200);
     return Reply<VoucherBook>.ok(
-        VoucherBook(vouchers: list.ok ? list.result : const <Voucher>[], printed: printed.result));
+      VoucherBook(vouchers: list.ok ? list.result : const <Voucher>[], printed: printed.result),
+    );
   }
 
   // ----- care ----------------------------------------------------------------------------

@@ -7,15 +7,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rtn_app/dartvel_client/dartvel_client.dart';
 import 'package:rtn_app/styles/theme.dart';
 
-Future<void> show(WidgetTester tester, Widget screen, {Brightness brightness = Brightness.light, double width = 1280}) async {
+Future<void> show(
+  WidgetTester tester,
+  Widget screen, {
+  Brightness brightness = Brightness.light,
+  double width = 1280,
+}) async {
   tester.view.physicalSize = Size(width, 2400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.runAsync(() async {
-    await tester.pumpWidget(MaterialApp(
-      theme: rtnTheme(brightness),
-      home: Material(child: screen),
-    ));
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: rtnTheme(brightness),
+        home: Material(child: screen),
+      ),
+    );
     // Long enough for a backend call to fail and the refusal to draw.
     await Future<void>.delayed(const Duration(milliseconds: 300));
   });
@@ -96,15 +103,26 @@ void main() {
     expect(find.text('*123#'), findsWidgets);
   });
 
-  for (final (String path, double width) in <(String, double)>[('/signin', 1280), ('/my', 360), ('/console', 1280), ('/', 360)]) {
+  for (final (String path, double width) in <(String, double)>[
+    ('/signin', 1280),
+    ('/my', 360),
+    ('/console', 1280),
+    ('/', 360),
+  ]) {
     testWidgets('the frame draws around $path at ${width.toInt()} px', (WidgetTester tester) async {
       tester.view.physicalSize = Size(width, 1600);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
-      final GoRouter router = GoRouter(initialLocation: path, routes: <RouteBase>[
-        GoRoute(path: '/:rest(.*)', builder: (BuildContext context, GoRouterState state) => const AppFrame(SizedBox.expand())),
-        GoRoute(path: '/', builder: (BuildContext context, GoRouterState state) => const AppFrame(SizedBox.expand())),
-      ]);
+      final GoRouter router = GoRouter(
+        initialLocation: path,
+        routes: <RouteBase>[
+          GoRoute(
+            path: '/:rest(.*)',
+            builder: (BuildContext context, GoRouterState state) => const AppFrame(SizedBox.expand()),
+          ),
+          GoRoute(path: '/', builder: (BuildContext context, GoRouterState state) => const AppFrame(SizedBox.expand())),
+        ],
+      );
       await tester.runAsync(() async {
         await tester.pumpWidget(MaterialApp.router(theme: rtnTheme(Brightness.light), routerConfig: router));
         await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -118,5 +136,31 @@ void main() {
   testWidgets('a backend that cannot be reached is said in words, with a retry', (WidgetTester tester) async {
     await show(tester, const HomeScreen());
     expect(find.text('Try again'), findsOneWidget);
+  });
+
+  testWidgets('switching the theme keeps the reader on the page they were on', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1280, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    DV.global<ThemeChoice>(const ThemeChoice(mode: ThemeMode.light));
+    final GoRouter router = GoRouter(
+      initialLocation: '/signin',
+      routes: <RouteBase>[
+        GoRoute(path: '/', builder: (BuildContext context, GoRouterState state) => const AppFrame(SizedBox.expand())),
+        GoRoute(
+          path: '/signin',
+          builder: (BuildContext context, GoRouterState state) => const AppFrame(SizedBox.expand()),
+        ),
+      ],
+    );
+    await tester.runAsync(() async {
+      await tester.pumpWidget(RtnApp(router));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pump();
+    await tester.tap(find.byTooltip('Switch to dark mode'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Switch to light mode'), findsOneWidget);
+    expect(router.routerDelegate.currentConfiguration.uri.path, '/signin');
   });
 }

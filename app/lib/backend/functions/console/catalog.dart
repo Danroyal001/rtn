@@ -5,5 +5,4 @@ import '../../../server/console.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'OperatorConsole.view')
-Future<Reply<Catalog>> _consoleCatalog(DVContext ctx) =>
-    Console.shared.catalog();
+Future<Reply<Catalog>> _consoleCatalog(DVContext ctx) => Console.shared.catalog();

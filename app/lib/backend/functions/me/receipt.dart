@@ -6,5 +6,4 @@ import '../../../server/signed_in.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'SubscriberLine.view')
-Future<Reply<LedgerEntry>> _receipt(DVContext ctx, int seq) =>
-    SelfCare.shared.receipt(me(ctx), seq);
+Future<Reply<LedgerEntry>> _receipt(DVContext ctx, int seq) => SelfCare.shared.receipt(me(ctx), seq);

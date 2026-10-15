@@ -13,5 +13,4 @@ Future<Reply<Done>> _consoleSaveBundle(
   String price,
   String validityDays,
   String offer,
-) =>
-    Console.shared.saveBundle(id, name, megabytes, price, validityDays, offer);
+) => Console.shared.saveBundle(id, name, megabytes, price, validityDays, offer);

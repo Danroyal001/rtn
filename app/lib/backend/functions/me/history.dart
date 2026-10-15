@@ -6,5 +6,4 @@ import '../../../server/signed_in.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'SubscriberLine.view')
-Future<Reply<LedgerPage>> _history(DVContext ctx, int limit) =>
-    SelfCare.shared.history(me(ctx), limit);
+Future<Reply<LedgerPage>> _history(DVContext ctx, int limit) => SelfCare.shared.history(me(ctx), limit);

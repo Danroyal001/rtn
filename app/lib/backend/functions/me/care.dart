@@ -6,5 +6,4 @@ import '../../../server/signed_in.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'SubscriberLine.view')
-Future<Reply<CareChat>> _careChat(DVContext ctx) =>
-    SelfCare.shared.care(me(ctx));
+Future<Reply<CareChat>> _careChat(DVContext ctx) => SelfCare.shared.care(me(ctx));

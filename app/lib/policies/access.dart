@@ -18,8 +18,7 @@ class SubscriberLinePolicy {
 
   Future<bool> view(DVSessionPrincipal caller, SubscriberLine? line) async => caller.claims['role'] == 'subscriber';
 
-  Future<bool> update(DVSessionPrincipal caller, SubscriberLine? line) async =>
-      caller.claims['role'] == 'subscriber';
+  Future<bool> update(DVSessionPrincipal caller, SubscriberLine? line) async => caller.claims['role'] == 'subscriber';
 }
 
 /// The operator console.
@@ -33,6 +32,5 @@ class OperatorConsolePolicy {
 
   Future<bool> view(DVSessionPrincipal caller, OperatorConsole? console) async => caller.claims['role'] == 'operator';
 
-  Future<bool> update(DVSessionPrincipal caller, OperatorConsole? console) async =>
-      caller.claims['role'] == 'operator';
+  Future<bool> update(DVSessionPrincipal caller, OperatorConsole? console) async => caller.claims['role'] == 'operator';
 }

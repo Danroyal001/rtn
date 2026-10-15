@@ -5,5 +5,4 @@ import '../../../server/selfcare.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'SubscriberLine.view')
-Future<Reply<Catalog>> _bundleCatalog(DVContext ctx) =>
-    SelfCare.shared.catalog();
+Future<Reply<Catalog>> _bundleCatalog(DVContext ctx) => SelfCare.shared.catalog();

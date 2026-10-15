@@ -5,5 +5,4 @@ import '../../../server/console.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'OperatorConsole.view')
-Future<Reply<CareChat>> _consoleCareThread(DVContext ctx, String msisdn) =>
-    Console.shared.careThread(msisdn);
+Future<Reply<CareChat>> _consoleCareThread(DVContext ctx, String msisdn) => Console.shared.careThread(msisdn);

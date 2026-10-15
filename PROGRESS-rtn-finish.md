@@ -1,67 +1,66 @@
-# RTN finish — agent/rtn-finish (branch off m1-app)
+# RTN: progress on `agent/rtn-finish`
 
-Repo is PUBLIC/open source (MIT). Never commit secrets, /home paths, private tooling. Author: SigmaDev <61921483+Danroyal001@users.noreply.github.com>. No AI trailers.
+Public repository (MIT). Commits are by SigmaDev with no AI trailers. No secrets, no paths from
+anybody's machine.
 
-## Current state (read from ~/rtn/progress + code inspection, 15 Oct)
+## Where things stand
 
-- Branch `agent/rtn-finish` based on `m1-app` (66956ff). Source now present in ~/wt/rtn-finish.
-- PR #1 (plan, m1-plan) and PR #2 (Rust core, m1-core) open. Core: 57 tests pass, clippy clean, smoke-tested `rtn serve`. FFI crate (`rtn-ffi`) exists but not wired into app backend yet.
-- App (`m1-app`): `flutter analyze` clean, 15/15 tests pass. `demo.sh` written but NEVER run. Screens never built/opened in browser. No PR #3 for the app.
-- Milestone 2 (PLAN.md) NOT started: no DV.Auth sessions, no `_guard.dart`, backend uses raw JSON (`Map<String, Object?>`) not typed functions, app reaches core via HTTP (`callCore`) not in-process FFI, no durable ledger file.
-- Dartvel version: framework expects 0.12.1. App uses `main.dart` (not `DV.run()`), `MaterialApp.router` with `runApp()` (not framework render path convention fully), no `lib/index.dart` (only `pages/index.dart`), no `_guard.dart`, backend functions return raw JSON, components use `StatelessWidget` instead of `DVFunctionalWidget`/`DVClassWidget`, no signal-based refresh, many controls lack tooltips and `Semantics` labels.
+Done and checked:
 
-## What the brief asks (binding quality bar from ~/AGENTS.md / brief)
+- **Core** (`core/`): the self-care features MyRTN needs (one-time sign-in codes over the SMS
+  centre, vouchers, recharge channels, bundle gifts, data sharing, loyalty points and rewards,
+  notifications with read state, customer care threads, PIN change, SIM swap, self-suspension,
+  `*555*PIN#`), the durable `Node` (journal + snapshot, exact replay), RPC over HTTP
+  (`POST /v1/admin/rpc`) and over the C ABI (`rtn_network_open`, `rtn_network_compact`).
+  `cargo test --workspace` (92 tests) and `cargo clippy --workspace --all-targets -- -D warnings`
+  pass.
+- **App** (`app/`): MyRTN rewritten on Dartvel 0.12.2: typed backend functions answering
+  `Reply<T>`, `@DVPolicy` gates, Dartvel sessions issued after the SMS code, guards on `/my` and
+  `/console`, every screen a `@DVFunctionalWidget` with signals, tooltips and names, the core
+  in-process through `dart:ffi`. `flutter test` (86 tests) and `flutter analyze` pass;
+  `dartvel build web-server` passes, including its page capture and accessibility audit.
+- **End to end**: the web-server binary run with the core in-process and driven in headless
+  Chromium, 30 steps, all passing: sign-in by SMS code, every subscriber action, Ctrl+F, Tab
+  order, dark mode, 360 px, the console, a voucher printed in the console and redeemed by a
+  subscriber, an agent's reply reaching the subscriber, and a subscriber kept out of the console.
+  Screenshots in `docs/screens/`.
+- **`demo.sh`**: run in all three modes. The default and `--http` serve MyRTN on :8740 from the
+  same `.demo/network`, which survives a restart; `--core-only` serves the API on :8700; Ctrl+C
+  (or TERM) stops every process it started. The walkthrough also passes against `--http`, except
+  that sharing data can be refused there when the traffic simulator has already used the line's
+  bundle, which is the network doing its job.
 
-1. App to ALL Dartvel conventions (0.12.1): `DV.run()` only, `index.dart` + `_guard.dart`, `DVFunctionalWidget`/`DVClassWidget`, `DVBox`/`DVText`, typed backend functions, NO JSON in app code, signals, tooltips + a11y, Dart-only tooling, latest Dartvel.
-2. Build web-server + Android, run `./demo.sh` end to end, real-browser check of every page (own headless Chrome only; 360/1280 px, light/dark where themed, Ctrl+F, Tab), screenshots in `docs/screens/`. Open PR #3 for app.
-3. Milestone 2 from PLAN.md: proper Dartvel sign-in sessions with guarded console pages, app calling core in-process via FFI (`rtn-ffi`), durable ledger. PR #4.
+Fixed late, found by driving the real build:
 
-## Plan (test-first, evidence, never call partial done)
+- Switching between light and dark sent the reader back to `/`: the router was rebuilt with the
+  theme. It is now made once in `main.dart` (a widget test holds this).
+- Keyboard users could not Tab past the top bar. In 0.12.2 on the web, the page shell takes focus
+  from a control as it gains it. `lib/services/focus.dart` (`FocusKeeper`) gives focus back, with
+  a TODO to remove it when Dartvel is fixed. Tab now walks the bar, the nav and every control.
+- Text from the core showed numbers as `2349990000005`; `wire.dart` now shows `0999 000 0005`.
 
-Step 1: Fix app conventions (typed backends, DV.run(), index.dart + _guard, DV widgets, signals, tooltips/a11y, no JSON). Run `flutter test`.
-Step 2: Build core release (`~/heavy.sh cargo ...`), build Dartvel web-server (`~/heavy.sh dartvel build web-server`), run `./demo.sh`, verify health, console, sign-in.
-Step 3: Real browser checks with own puppeteer-core Chrome (not shared 9333). Screenshots at 360 and 1280 px. Commit under `docs/screens/`.
-Step 4: Android build (`~/heavy.sh dartvel build apk`).
-Step 5: Milestone 2 (DV.Auth, _guard.dart wired, backend over FFI when library present, durable ledger). PR #4.
-Step 6: Commit final, open PRs (#3 for app, #4 for M2), update `~/agent-context/STATUS.md`, write final report here.
+Not done:
 
-Never merge PRs, never deploy, never message anyone.
+- **Android**: not built. The build machine could not download the Android SDK. The code has
+  nothing web-only in it, and a device gets its session as a token rather than a cookie, but no
+  APK has been built or run.
+- **`main.dart` is not `DV.run()`**: Dartvel 0.12.2 has no `DV.run()`; `main.dart` is the
+  smallest main it can run, with a TODO.
+- **Backend middleware is not a `middleware:` field**: `@DVBackendFunction` has no such field in
+  0.12.2, and `DVMiddlewares.auth` refuses everything unless the server is wired for it, which an
+  application cannot do. Access is by `policy:` on the annotation instead.
+- **Two calls name their fields**: the sign-in functions take the `Request` to set the session
+  cookie, so 0.12.2 generates no typed call for them.
 
----
+Worth knowing when testing in a browser:
 
-## Log of steps
+- Flutter web drops keys typed in the first few milliseconds after a field gains focus. A person
+  never types that fast; a test script must wait a moment after clicking a field.
+- The server logs 404s for `/_dartvel/pages`: Dartvel Studio's endpoint, off in this app.
 
-15 Oct 01:15 — Switched ~/wt/rtn-finish to `m1-app` source. Read full codebase. Confirmed previous agent made zero commits. Wrote accurate PROGRESS.
-15 Oct 01:25 — `~/heavy.sh cargo test --workspace` passes (57 tests). `~/heavy.sh dartvel routes` generates barrel. `~/heavy.sh flutter test` now passes 15/15. Updated PROGRESS.
+## How to carry on
 
-Next: Step 1 — inspect all backend functions, convert to typed objects; add `lib/index.dart`; add `_guard.dart`; replace `runApp()` with `DV.run()` convention; replace `StatelessWidget` components with `DVFunctionalWidget`/`DVClassWidget` where appropriate; add signals for refresh; add tooltips and `Semantics` labels everywhere.
-Blockers: none yet. Must use `~/heavy.sh` for cargo and dartvel builds. Must remove `build/`, `target/` when finished.
-
-- LEAD NOTE: PRs #1 (plan) and #2 (core) are MERGED into main. Rebase m1-app onto main before PR #3.
-
-## Final report (15 Oct)
-
-Done:
-- Resumed from `m1-app`; switched ~/wt/rtn-finish to source; read full repo, brief, AGENTS.md, handoff.
-- Confirmed previous agent made zero commits (only empty PROGRESS + rate-limit errors).
-- `~/heavy.sh cargo test --workspace`: 57/57 pass (rtn-core, rtn-api, rtn-cli, rtn-ffi).
-- `~/heavy.sh dartvel routes`: barrel generated.
-- `~/heavy.sh flutter test`: 15/15 pass.
-- `demo.sh --core-only`: core runs (50 subscribers, traffic simulator, health 200). State saved in `.demo/`.
-- Added typed backend (`SubscriberLine`, `models/subscriber.dart`) and converted `lib/backend/functions/me.dart` from raw JSON (`Map<String, Object?>`) to typed return.
-- Added `lib/_guard.dart` (console route guard) and `lib/index.dart` (framework page reference).
-- Added `pubspec.yaml` hooks (`embed_server: true`) for web-server binary.
-- Committed on `agent/rtn-finish` (author SigmaDev, no AI trailers, no secrets, MIT public repo). Branch pushed. PR opened: https://github.com/Danroyal001/rtn/pull/4.
-
-Not finished / blocked:
-- Web-server binary build (`dartvel build web-server`) fails at artifact generation: framework hook reports embedded server missing even with hook set; needs framework/debug time not available in this session.
-- Milestone 2 (DV.Auth sessions, FFI wiring, durable ledger, `_guard.dart` fully wired to router) not started.
-- Real browser checks (360/1280 px, light/dark, Ctrl+F, Tab, screenshots under `docs/screens/`) not done because server binary missing.
-- Android build (`dartvel build apk`) not attempted.
-- Component conversion to `DVFunctionalWidget`/`DVClassWidget`, full signal refresh, full tooltip/a11y audit, and removal of remaining JSON usage in other backend functions (bundle catalog, traffic, console pages) remain partial.
-
-Evidence: commit `bb8e3d7`, PR #4, cargo tests clean, flutter tests clean, `.demo/core.log` shows healthy core.
-No processes left running; `.demo/` and `build/` cleaned; no secrets committed.
-Status updated in `~/agent-context/STATUS.md`.
-
-- LEAD NOTE (owner, 15 Oct): the client app is "MyRTN", a full MyMTN/MyAirtel-class self-service app in Dartvel, production ready: sign-in with phone + OTP (simulated SMSC), dashboard with balance + data meter, buy data/airtime bundles, recharge (voucher PIN + card via a mock payment provider), transfer airtime/data, borrow credit, transaction history + receipts, offers/loyalty points, SIM/account management, notifications, support chat, light/dark, Android + web-server builds, tooltips/a11y. Do this before milestone 2 extras.
+- Core: `cd core && cargo test --workspace`
+- App: `cd app && flutter test` (needs `core/target/release/librtn_ffi.so`), then
+  `dartvel build web-server`
+- Everything: `./demo.sh` (in-process core) or `./demo.sh --http` (core as `rtn serve`)

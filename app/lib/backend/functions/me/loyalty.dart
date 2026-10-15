@@ -6,5 +6,4 @@ import '../../../server/signed_in.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'SubscriberLine.view')
-Future<Reply<Loyalty>> _loyalty(DVContext ctx) =>
-    SelfCare.shared.loyalty(me(ctx));
+Future<Reply<Loyalty>> _loyalty(DVContext ctx) => SelfCare.shared.loyalty(me(ctx));

@@ -6,5 +6,4 @@ import '../../../server/signed_in.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'SubscriberLine.update')
-Future<Reply<Done>> _changePlan(DVContext ctx, String planId) =>
-    SelfCare.shared.setPlan(me(ctx), planId);
+Future<Reply<Done>> _changePlan(DVContext ctx, String planId) => SelfCare.shared.setPlan(me(ctx), planId);

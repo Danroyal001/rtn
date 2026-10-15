@@ -5,5 +5,4 @@ import '../../../server/console.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'OperatorConsole.view')
-Future<Reply<SubscriberFile>> _consoleSubscriber(DVContext ctx, String msisdn) =>
-    Console.shared.subscriber(msisdn);
+Future<Reply<SubscriberFile>> _consoleSubscriber(DVContext ctx, String msisdn) => Console.shared.subscriber(msisdn);

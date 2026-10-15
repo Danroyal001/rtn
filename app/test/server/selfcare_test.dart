@@ -52,6 +52,11 @@ void main() {
     expect(garbage.code, 'invalid_msisdn');
   });
 
+  test('the status says how many lines the network has', () async {
+    final Reply<Done> status = await care.status();
+    expect(status.result.message, '5 subscribers');
+  });
+
   test('the home screen has the line, offers and recent activity', () async {
     final Reply<Dashboard> home = await care.dashboard(ada);
     expect(home.ok, isTrue, reason: home.message);
@@ -90,8 +95,13 @@ void main() {
     expect(paid.result.reference, startsWith('mp_'));
     final Reply<LedgerPage> history = await care.history(ada, 5);
     expect(history.result.entries.first.note, contains('card •••• 4242'));
-    final Reply<Outcome> declined =
-        await care.rechargeCard(ada, '', '1,000', card.copyWith(number: '4000000000000002'), 'c2');
+    final Reply<Outcome> declined = await care.rechargeCard(
+      ada,
+      '',
+      '1,000',
+      card.copyWith(number: '4000000000000002'),
+      'c2',
+    );
     expect(declined.code, 'card_declined');
     final Reply<Outcome> badAmount = await care.rechargeCard(ada, '', 'lots', card, 'c3');
     expect(badAmount.code, 'invalid_amount');
@@ -176,6 +186,17 @@ void main() {
     care = SelfCare(core, pay: MockPay());
     final Reply<LedgerPage> history = await care.history(ada, 3);
     expect(history.result.entries.any((LedgerEntry e) => e.requestId.endsWith(':kept')), isTrue);
+  });
+
+  test('a call made while the network is being seeded waits for it', () async {
+    final Directory fresh = Directory.systemTemp.createTempSync('rtn-app-start');
+    final Core starting = Core(FfiCoreLink.open(library, fresh.path), clock: () => clock);
+    starting.startUp(seed: 7);
+    // No await between starting up and asking: the first visitor after a restart.
+    final Reply<Line> line = await SelfCare(starting, pay: MockPay()).line('2349990000007');
+    expect(line.ok, isTrue, reason: line.message);
+    starting.close();
+    fresh.deleteSync(recursive: true);
   });
 
   test('a core that cannot be reached is a refusal, not a crash', () async {

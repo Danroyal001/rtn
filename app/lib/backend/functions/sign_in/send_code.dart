@@ -5,5 +5,4 @@ import '../../../server/selfcare.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction()
-Future<Reply<CodeSent>> _sendSignInCode(String msisdn) =>
-    SelfCare.shared.sendCode(msisdn);
+Future<Reply<CodeSent>> _sendSignInCode(String msisdn) => SelfCare.shared.sendCode(msisdn);

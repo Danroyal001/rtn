@@ -9,12 +9,12 @@ import '../services/wire.dart';
 const List<String> historyFilters = <String>['All', 'Money in', 'Money out', 'Data', 'Calls & SMS'];
 
 bool matchesHistoryFilter(LedgerEntry e, String filter) => switch (filter) {
-      'Money in' => e.airtimeDelta > 0,
-      'Money out' => e.airtimeDelta < 0,
-      'Data' => e.dataDelta != 0 || e.kind == 'data',
-      'Calls & SMS' => e.kind == 'voice' || e.kind == 'sms',
-      _ => true,
-    };
+  'Money in' => e.airtimeDelta > 0,
+  'Money out' => e.airtimeDelta < 0,
+  'Data' => e.dataDelta != 0 || e.kind == 'data',
+  'Calls & SMS' => e.kind == 'voice' || e.kind == 'sms',
+  _ => true,
+};
 
 @DVFunctionalWidget()
 Widget _historyScreen(BuildContext context) {
@@ -27,7 +27,9 @@ Widget _historyScreen(BuildContext context) {
   if (!reply.ok) {
     return Screen(<Widget>[const PageTitle('History'), Refusal(reply.message, onRetry: () => reload(page, fetch))]);
   }
-  final List<LedgerEntry> shown = reply.result.entries.where((LedgerEntry e) => matchesHistoryFilter(e, filter.value)).toList();
+  final List<LedgerEntry> shown = reply.result.entries
+      .where((LedgerEntry e) => matchesHistoryFilter(e, filter.value))
+      .toList();
   return Screen(<Widget>[
     const PageTitle('History', subtitle: 'Your last 100 transactions. Open one for its receipt.'),
     Choices(historyFilters, selected: filter.value, what: 'filter', onSelected: (String v) => filter.value = v),
@@ -55,10 +57,14 @@ Widget _receiptScreen(BuildContext context, String seq) {
   }
   final LedgerEntry e = reply.result;
   final ColorScheme colors = Theme.of(context).colorScheme;
-  Widget row(String label, String value) => DVBox.row(<Widget>[
-        Expanded(child: DVText(label).modifier(const DVModifier().color(colors.onSurfaceVariant))),
-        Flexible(child: DVText(value).modifier(const DVModifier().fontWeight(FontWeight.w700))),
-      ], spacing: 12, crossAlign: DVCrossAlign.start);
+  Widget row(String label, String value) => DVBox.row(
+    <Widget>[
+      Expanded(child: DVText(label).modifier(const DVModifier().color(colors.onSurfaceVariant))),
+      Flexible(child: DVText(value).modifier(const DVModifier().fontWeight(FontWeight.w700))),
+    ],
+    spacing: 12,
+    crossAlign: DVCrossAlign.start,
+  );
   return Screen(<Widget>[
     PageTitle(entryTitle(e.kind), subtitle: e.note),
     Panel(<Widget>[
@@ -74,9 +80,14 @@ Widget _receiptScreen(BuildContext context, String seq) {
       row('Transaction', '#${e.seq}'),
       row('Reference', e.requestId),
     ], spacing: 10),
-    DVBox.wrap(<Widget>[
-      ActionButton('Copy reference', tooltip: 'Copy the reference to quote to RTN care', primary: false, icon: Icons.copy,
-          onPressed: () => DV.Clipboard.copy('RTN #${e.seq} ${e.requestId}')),
+    DVBox.wrapLine(<Widget>[
+      ActionButton(
+        'Copy reference',
+        tooltip: 'Copy the reference to quote to RTN care',
+        primary: false,
+        icon: Icons.copy,
+        onPressed: () => DV.Clipboard.copy('RTN #${e.seq} ${e.requestId}'),
+      ),
       const TextLink(DVRoutes.myhistory, 'Back to history', tooltip: 'Back to all transactions'),
     ], spacing: 12),
   ]);

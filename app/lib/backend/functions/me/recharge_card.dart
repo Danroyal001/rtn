@@ -15,11 +15,10 @@ Future<Reply<Outcome>> _rechargeCard(
   String expiry,
   String cvv,
   String attempt,
-) =>
-    SelfCare.shared.rechargeCard(
-      me(ctx),
-      forNumber,
-      amount,
-      CardDetails(number: cardNumber, expiry: expiry, cvv: cvv),
-      attempt,
-    );
+) => SelfCare.shared.rechargeCard(
+  me(ctx),
+  forNumber,
+  amount,
+  CardDetails(number: cardNumber, expiry: expiry, cvv: cvv),
+  attempt,
+);

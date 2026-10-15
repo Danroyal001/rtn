@@ -63,6 +63,11 @@ String localNumber(String msisdn) {
   return msisdn;
 }
 
+/// Text the network wrote, with every RTN number in it as people read it:
+/// "Data from 2349990000005" becomes "Data from 0999 000 0005".
+String readable(String text) =>
+    text.replaceAllMapped(RegExp(r'(?<!\d)234\d{10}(?!\d)'), (Match m) => localNumber(m[0]!));
+
 /// A number typed any common way, in the international form the network uses
 /// (2349990000001), or null when it is not a number. The same rules as the
 /// core's.
@@ -110,22 +115,22 @@ String validity(int days) => days == 1 ? '1 day' : '$days days';
 
 /// Words for a ledger entry's kind.
 String entryTitle(String kind) => switch (kind) {
-      'top_up' => 'Recharge',
-      'loan_repayment' => 'Loan repaid',
-      'loan' => 'Airtime borrowed',
-      'bundle_purchase' => 'Data bundle',
-      'bundle_received' => 'Data gift received',
-      'bundle_expired' => 'Bundle expired',
-      'transfer_out' => 'Airtime sent',
-      'transfer_in' => 'Airtime received',
-      'data_share_out' => 'Data shared',
-      'data_share_in' => 'Data received',
-      'reward_redeemed' => 'Reward',
-      'voice' => 'Call',
-      'sms' => 'SMS',
-      'data' => 'Data use',
-      _ => kind.isEmpty ? 'Entry' : '${kind[0].toUpperCase()}${kind.substring(1).replaceAll('_', ' ')}',
-    };
+  'top_up' => 'Recharge',
+  'loan_repayment' => 'Loan repaid',
+  'loan' => 'Airtime borrowed',
+  'bundle_purchase' => 'Data bundle',
+  'bundle_received' => 'Data gift received',
+  'bundle_expired' => 'Bundle expired',
+  'transfer_out' => 'Airtime sent',
+  'transfer_in' => 'Airtime received',
+  'data_share_out' => 'Data shared',
+  'data_share_in' => 'Data received',
+  'reward_redeemed' => 'Reward',
+  'voice' => 'Call',
+  'sms' => 'SMS',
+  'data' => 'Data use',
+  _ => kind.isEmpty ? 'Entry' : '${kind[0].toUpperCase()}${kind.substring(1).replaceAll('_', ' ')}',
+};
 
 /// A core message ("not enough airtime: ...") as a sentence: capitalised and
 /// ending with a full stop.

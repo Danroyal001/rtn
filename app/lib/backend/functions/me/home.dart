@@ -6,5 +6,4 @@ import '../../../server/signed_in.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'SubscriberLine.view')
-Future<Reply<Dashboard>> _home(DVContext ctx) =>
-    SelfCare.shared.dashboard(me(ctx));
+Future<Reply<Dashboard>> _home(DVContext ctx) => SelfCare.shared.dashboard(me(ctx));

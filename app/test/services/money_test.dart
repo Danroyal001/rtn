@@ -52,4 +52,13 @@ void main() {
     expect(entryTitle('bundle_purchase'), 'Data bundle');
     expect(entryTitle('something_new'), 'Something new');
   });
+
+  test('numbers in the words of the network read the local way', () {
+    expect(readable('Data from 2349990000005'), 'Data from 0999 000 0005');
+    expect(
+      readable('Sent ₦100.00 to 2349990000002, fee from 2349990000000.'),
+      'Sent ₦100.00 to 0999 000 0002, fee from RTN.',
+    );
+    expect(readable('Reference 12349990000005 is not a number'), 'Reference 12349990000005 is not a number');
+  });
 }

@@ -23,8 +23,9 @@ Widget _signInScreen(BuildContext context) {
       return;
     }
     busy.value = true;
-    final Reply<CodeSent> reply =
-        await ask(() => sendSignInCode(msisdn: number.read(), fromJson: Reply.of(CodeSent.fromJson)));
+    final Reply<CodeSent> reply = await ask(
+      () => sendSignInCode(msisdn: number.read(), fromJson: Reply.of(CodeSent.fromJson)),
+    );
     busy.value = false;
     if (reply.ok) {
       sent.value = reply.result;
@@ -62,8 +63,12 @@ Widget _signInScreen(BuildContext context) {
           onChanged: (String v) => number.value = v,
           onSubmitted: sendCode,
         ),
-        ActionButton('Send me a code',
-            tooltip: 'Send a sign-in code by SMS to this number', busy: busy.value, onPressed: sendCode),
+        ActionButton(
+          'Send me a code',
+          tooltip: 'Send a sign-in code by SMS to this number',
+          busy: busy.value,
+          onPressed: sendCode,
+        ),
       ] else ...<Widget>[
         DVText('We sent a code to ${localNumber(waiting.msisdn)}. It works for 5 minutes.')
             .modifier(const DVModifier().color(colors.onSurfaceVariant)),
@@ -77,15 +82,23 @@ Widget _signInScreen(BuildContext context) {
           onSubmitted: verify,
         ),
         ActionButton('Sign in', tooltip: 'Check the code and sign in', busy: busy.value, onPressed: verify),
-        DVBox.wrap(<Widget>[
-          ActionButton('Use another number',
-              tooltip: 'Go back and type a different number', primary: false, onPressed: () {
-            sent.value = null;
-            code.value = '';
-            problem.value = '';
-          }),
-          ActionButton('Send a new code',
-              tooltip: 'Send another code to the same number', primary: false, onPressed: sendCode),
+        DVBox.wrapLine(<Widget>[
+          ActionButton(
+            'Use another number',
+            tooltip: 'Go back and type a different number',
+            primary: false,
+            onPressed: () {
+              sent.value = null;
+              code.value = '';
+              problem.value = '';
+            },
+          ),
+          ActionButton(
+            'Send a new code',
+            tooltip: 'Send another code to the same number',
+            primary: false,
+            onPressed: sendCode,
+          ),
         ], spacing: 8),
       ],
       if (problem.value.isNotEmpty) Notice(problem.value),

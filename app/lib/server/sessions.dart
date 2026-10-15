@@ -27,7 +27,8 @@ Future<Response> sessionResponse(Request request, Reply<SignedIn> who) async {
     claims: <String, Object?>{'role': who.result.role, 'name': who.result.name},
   );
   final bool asToken = DVAuthEndpoints.deliversToken(request);
-  final bool plain = stage.development ||
+  final bool plain =
+      stage.development ||
       DVSessionCookie.plainLocal(
         request.url,
         forwardedProto: request.headers.get('x-forwarded-proto'),
@@ -47,11 +48,11 @@ Future<Response> sessionResponse(Request request, Reply<SignedIn> who) async {
 }
 
 Response _json(int status, Map<String, Object?> body, {String? cookie}) => Response(
-      status,
-      headers: Headers(<String, String>{
-        'content-type': 'application/json; charset=utf-8',
-        'cache-control': 'no-store',
-        'set-cookie': ?cookie,
-      }),
-      body: Stream<List<int>>.value(utf8.encode(jsonEncode(body))),
-    );
+  status,
+  headers: Headers(<String, String>{
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+    'set-cookie': ?cookie,
+  }),
+  body: Stream<List<int>>.value(utf8.encode(jsonEncode(body))),
+);

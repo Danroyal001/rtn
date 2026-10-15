@@ -6,5 +6,4 @@ import '../../../server/signed_in.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'SubscriberLine.update')
-Future<Reply<Done>> _suspendLine(DVContext ctx, String pin) =>
-    SelfCare.shared.suspend(me(ctx), pin);
+Future<Reply<Done>> _suspendLine(DVContext ctx, String pin) => SelfCare.shared.suspend(me(ctx), pin);

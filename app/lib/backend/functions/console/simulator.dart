@@ -5,5 +5,4 @@ import '../../../server/console.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'OperatorConsole.update')
-Future<Reply<Done>> _consoleSimulator(DVContext ctx, bool running) =>
-    Console.shared.setSimulator(running);
+Future<Reply<Done>> _consoleSimulator(DVContext ctx, bool running) => Console.shared.setSimulator(running);

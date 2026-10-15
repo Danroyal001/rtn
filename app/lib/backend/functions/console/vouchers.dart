@@ -5,5 +5,4 @@ import '../../../server/console.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'OperatorConsole.view')
-Future<Reply<VoucherBook>> _consoleVouchers(DVContext ctx) =>
-    Console.shared.vouchers();
+Future<Reply<VoucherBook>> _consoleVouchers(DVContext ctx) => Console.shared.vouchers();

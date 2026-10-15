@@ -5,5 +5,4 @@ import '../../../server/console.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'OperatorConsole.view')
-Future<Reply<CareDesk>> _consoleCareDesk(DVContext ctx) =>
-    Console.shared.careDesk();
+Future<Reply<CareDesk>> _consoleCareDesk(DVContext ctx) => Console.shared.careDesk();

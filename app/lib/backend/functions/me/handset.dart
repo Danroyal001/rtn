@@ -6,5 +6,4 @@ import '../../../server/signed_in.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'SubscriberLine.update')
-Future<Reply<Done>> _setHandset(DVContext ctx, bool on) =>
-    SelfCare.shared.setHandset(me(ctx), on);
+Future<Reply<Done>> _setHandset(DVContext ctx, bool on) => SelfCare.shared.setHandset(me(ctx), on);

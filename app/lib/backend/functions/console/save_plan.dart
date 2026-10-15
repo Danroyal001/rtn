@@ -12,5 +12,4 @@ Future<Reply<Done>> _consoleSavePlan(
   String voicePerSecond,
   String smsPerSegment,
   String dataPerMb,
-) =>
-    Console.shared.savePlan(id, name, voicePerSecond, smsPerSegment, dataPerMb);
+) => Console.shared.savePlan(id, name, voicePerSecond, smsPerSegment, dataPerMb);

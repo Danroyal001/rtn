@@ -6,5 +6,4 @@ import '../../../server/signed_in.dart';
 import '../../../services/wire.dart';
 
 @DVBackendFunction(policy: 'SubscriberLine.update')
-Future<Reply<Done>> _renameLine(DVContext ctx, String name) =>
-    SelfCare.shared.rename(me(ctx), name);
+Future<Reply<Done>> _renameLine(DVContext ctx, String name) => SelfCare.shared.rename(me(ctx), name);

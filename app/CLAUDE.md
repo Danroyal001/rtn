@@ -3,10 +3,10 @@
 The same block as `AGENTS.md`, in the file Claude Code reads. Both are generated from one source, so neither can be wrong on its own.
 
 <!-- dartvel:begin agents -->
-<!-- Written by `dartvel dev`, matched to Dartvel 0.12.1.
+<!-- Written by `dartvel dev`, matched to Dartvel 0.12.2.
      Edits inside this block are replaced; text outside it is kept. -->
 
-## Dartvel 0.12.1
+## Dartvel 0.12.2
 
 # Dartvel working rules
 
@@ -158,12 +158,44 @@ carriers for model sync, `DVModelSync`, `DVSemanticIndex`, `DVOfflineRemote`,
 `DVCacheRuntime`, the lifecycle registries behind `DV.lifecycle`, the worker
 behind `DV.Jobs.work(...)`, and the platform bindings that report connectivity.
 An application reads the signal and waits; it does not drive the machinery.
-
-## Where to read more
-
-The documentation for this exact version ships with it, at:
-
-    /home/sigmadev/dartvel_dev/packages/dartvel_cli/docs
-
-Read it before adding anything: it describes the API as this version has it, which is not always what the newest website says.
 <!-- dartvel:end agents -->
+
+## MyRTN in this repository
+
+How this app applies the rules above, and where Dartvel 0.12.2 leaves a gap.
+
+- `lib/main.dart` is the smallest main 0.12.2 can run, with a TODO to become `DV.run()` when
+  Dartvel ships it.
+- Pages are one line in `lib/pages/**`; screens are `@DVFunctionalWidget`s in `lib/components/`.
+  No `StatelessWidget`, `StatefulWidget`, `Text` or `Container` in app code: `DVBox`, `DVText`
+  and signals. Async data sits in a `DVSignal<Reply<T>?>` filled by `loadInto` (`lib/services/remote.dart`).
+  A functional widget's body is moved into generated code, so it may only refer to public names.
+- Every control has a tooltip, and the tooltip is its accessible name: start it with the visible
+  label (`ActionButton` does this for you). Never put `semanticLabel` on text that shows a value;
+  it replaces the value for screen readers.
+- A `DVBox.row` with no `Flexible` child becomes a wrapping bar on narrow screens. A `Spacer` is
+  not a `Flexible`: use `Expanded(child: SizedBox.shrink())`.
+- Backend functions are typed: they take strings, ints and bools and return `Reply<T>` from
+  `lib/services/wire.dart`, never a map and never a thrown error (Dartvel turns those into a bare
+  500). `wire.dart` is the only place JSON is written; a page passes `fromJson: Reply.of(T.fromJson)`
+  because the 0.12.2 client asks for it.
+- Access is `@DVBackendFunction(policy: 'SubscriberLine.view' | 'OperatorConsole.update' ...)`,
+  defined in `lib/policies/access.dart`. 0.12.2 has no `middleware:` field on the annotation, and
+  `DVMiddlewares.auth` refuses everything unless the server is wired for it, so policies are the gate.
+  The line a function acts on is the session's user id (`me(ctx)`), never a request field.
+- Sign-in is a phone number and a code the RTN core sends by SMS; `lib/server/sessions.dart`
+  turns a checked code into a Dartvel session. Those two functions take the `Request`, so their
+  client calls are the only ones that name fields (`lib/services/account.dart`).
+- `/my/**` and `/console/**` have `_guard.dart`s; `/`, `/signin` and `/operator` are public. A
+  `_guard.dart` directly in `lib/pages` would guard the sign-in page too.
+- Server-only code is in `lib/server/` (dart:io, dart:ffi). Pages never import it.
+- Text the core writes (ledger notes, SMS, bundle names, refusals) is decoded with `words()` in
+  `wire.dart`, which turns its `234…` numbers into the local `0999 000 0001` form.
+- `DVBox.wrapLine`, not its compatibility alias `DVBox.wrap`. Format with `dart format .` (page
+  width 120, set in `analysis_options.yaml`).
+- `FocusKeeper` (`lib/services/focus.dart`) works around a 0.12.2 web bug where the page shell
+  takes focus from a control, so Tab could not get past the top bar; remove it when Dartvel fixes it.
+
+Tests: `flutter test` (the services tests load `../core/target/release/librtn_ffi.so`; build it
+with `cargo build --release` in `core/`). Build: `dartvel build web-server` (set `DARTVEL_CHROME`
+when Chrome is not in a standard place).
