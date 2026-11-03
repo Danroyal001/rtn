@@ -27,7 +27,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   lints: ^4.0.0
-  dartvel_cli: ^0.13.17
+  dartvel_cli: ^0.13.18
 
 flutter:
   uses-material-design: true
