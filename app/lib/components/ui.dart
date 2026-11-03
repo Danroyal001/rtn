@@ -274,13 +274,17 @@ Widget _textLink(BuildContext context, DVRouteTarget to, String label, {required
   ),
 );
 
-/// A screen's content: centred, readable width, scrolling.
+/// A screen's content: centred, readable width, scrolling. The scrolling area
+/// reaches the window's edges and the margins are inside it, so the scrollbar
+/// Dartvel keeps on screen sits in the margin, not over the content.
 @DVFunctionalWidget()
 Widget _screen(BuildContext context, List<Widget> children, {double maxWidth = 760}) => DVBox.scrollableList(<Widget>[
-  Center(
-    child: ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: maxWidth),
-      child: DVBox.list(children, spacing: 16),
+  DVBox.list(<Widget>[
+    Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: DVBox.list(children, spacing: 16),
+      ),
     ),
-  ),
-], modifier: const DVModifier().paddingSymmetric(horizontal: 16, vertical: 20));
+  ], modifier: const DVModifier().paddingSymmetric(horizontal: 16, vertical: 20)),
+]);
