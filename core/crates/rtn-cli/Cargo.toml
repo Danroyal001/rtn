@@ -20,3 +20,4 @@ axum.workspace = true
 tokio.workspace = true
 clap.workspace = true
 ureq.workspace = true
+rtn-5gc = { path = "../rtn-5gc" }
