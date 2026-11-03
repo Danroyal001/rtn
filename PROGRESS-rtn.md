@@ -27,7 +27,21 @@ No secrets and no paths from anybody's machine in the repo.
 - **Signed-out `/console` goes to `/signin`**, not `/operator`: the server uses the one
   `dartvel.auth.pages.signIn` for every guarded route; the app's own console guard (to `/operator`)
   only runs in the browser. Also a Dartvel limitation (one sign-in page per app).
-- Tab order and the 390 px layout: see the PR for what the 0.12.2 baseline comparison showed.
+- **Tab does not reach a page's own controls.** In headless Chrome, Tab cycles between the top
+  bar's home link, the theme switch and the Flutter view; on `/signin` it skips the number field.
+  Identical on a 0.12.2 baseline build of `main` and on 0.13.18, so not an upgrade regression;
+  `FocusKeeper` (the app's workaround for Dartvel's page shell taking focus) is not enough. Needs a
+  Dartvel fix.
+- Fixed here: Dartvel 0.13.2 keeps the page scrollbar on screen, and `Screen` padded its scroll
+  view from outside, so the bar covered the right edge of every card at 390 px (a regression from
+  the upgrade, seen against the 0.12.2 baseline). The margins are now inside the scroll view.
+- Older layout nit, not fixed: "Quick actions" on the home screen shows one centred tile per row
+  at phone width (same on 0.12.2).
+- **Android:** `dart run dartvel_cli:dartvel build android --profile profile` builds
+  `build/app/outputs/flutter-apk/app-profile.apk` (76.9 MB, debug-signed, minSdk 24, targetSdk 36).
+  Not run: this VPS has no `/dev/kvm` for an emulator. A release APK needs a release key
+  (`DARTVEL_ANDROID_KEYSTORE`…). `prodBackendHost` is `http://localhost:8740`, so a phone would
+  need a reachable backend host set before the APK is useful.
 - **No data charging yet** on the 5G core: Open5GS's 5G core has no charging interface; free5GC's
   SMF does (Nchf_ConvergedCharging) but no user plane worked with it here. Next: `rtn-chf` and a
   free5GC-compatible UPF (docs/PLAN.md, "After the spike").
