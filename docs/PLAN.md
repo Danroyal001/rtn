@@ -144,9 +144,75 @@ gained vouchers, a care desk and the SMS centre.
   and `rtn_network_open` both use it. Replay is exact because the core reads no clock and no
   random source: callers pass `now` and a `nonce`.
 
-## After milestone 2
-- **M3, protocols**: a Diameter Gy (credit control) front for the charging engine, SMPP 3.4 bind
-  for the SMSC, and a USSD aggregator-style HTTP callback adapter.
-- **M4, network side**: a simulated radio/packet core (attach/detach, cells, roaming partner),
-  number portability lookup, CDR export.
-- **M5, scale**: sharded charging engine, ledger replication, load test at 10k TPS.
+## Milestone 3 spike: a simulated phone on a real 5G core (2026-11-03)
+
+Details, commands and output: [M3-SPIKE.md](M3-SPIKE.md). Verified by running it:
+
+- **Attach and data.** Open5GS v2.8.0 (5G core) with UERANSIM v3.3.0 on RTN's test PLMN 999/70:
+  a UE registers, gets a PDU session from `10.45.0.0/16` and pings through the UPF and out of N6.
+  `net/5gc/up.sh`, `ue.sh`, `down.sh`.
+- **Subscriber data** lives in MongoDB in both Open5GS (`open5gs.subscribers`, one document per
+  IMSI) and free5GC (`free5gc`, a dozen collections behind the webconsole API).
+- **Charging.** Open5GS's SMF speaks Diameter Gy only for 4G sessions and Open5GS has no CHF, so
+  its 5G core has no place for an external OCS. free5GC's SMF calls a CHF over
+  Nchf_ConvergedCharging v3 (HTTP/2), found through the NRF; seen running. But Open5GS's UPF cannot
+  parse free5GC's PFCP session requests, and free5GC's own UPF needs the `gtp5g` kernel module,
+  so that combination had no user plane here.
+- **First RTN network function: `rtn-5gc`**, a provisioning bridge. SIM keys (`K` from an operator
+  secret, `OPc` by MILENAGE), RTN's active lines written into Open5GS's subscriber database and
+  barred lines removed, UERANSIM UE files, and `rtn 5g sync` / `rtn 5g ue-config`. An integration
+  test attaches an RTN line and pings through the UPF, and shows a barred line refused.
+- **Not done:** data usage does not reach RTN's ledger yet. That is the first item below.
+
+## After the spike
+
+In order. Anything not run here is marked *unverified*.
+
+- **M3a, an RTN CHF (`rtn-chf`).** Nchf_ConvergedCharging v3 over HTTP/2 cleartext; registers with
+  the NRF as a CHF (NFRegister, heartbeats); create/update/release answered from RTN's OCS with
+  `grantedUnit.totalVolume` per rating group. `rtn-core` gains a data credit-control session
+  (reserve, commit and re-reserve, release) with the same idempotency and property tests as voice.
+  Test against free5GC's SMF.
+- **M3b, a user plane free5GC's SMF can drive**, so usage reports reach the CHF: free5GC's UPF with
+  `gtp5g` on a disposable VM, or eUPF (eBPF/XDP, *unverified*), or RTN's own UPF (M4).
+- **M3c, Diameter Gy** for 4G over the same credit-control session (Open5GS's SMF already sends Gy
+  for EPC sessions); a 4G RAN simulator such as srsRAN 4G with ZeroMQ (*unverified*). SMPP 3.4 for
+  the SMSC and a USSD aggregator callback adapter, as planned before.
+- **M4, a Rust user plane.** A UPF in Rust: PFCP (N4) session handling, GTP-U (N3) encapsulation,
+  usage reporting for URRs; the fast path in eBPF/XDP (*unverified* on this kernel; needs
+  privileges, so a VM). Then AMF and SMF in Rust (NGAP over SCTP, NAS 5GMM/5GSM, SBI), keeping
+  the Open5GS/free5GC NFs as test peers.
+- **M5, voice and messaging on IMS.** P-CSCF/S-CSCF, VoLTE/VoNR, SMS over IMS; RTN's per-second
+  voice charging already models the credit-control shape (*unverified* tooling: Kamailio-based
+  IMS, Open5GS's PCRF Rx).
+- **M6, interconnect.** SIP interconnect to other networks, number portability lookup, CDR export;
+  roaming (SEPP, N32) much later.
+- **M7, SIMs.** Real programmable SIMs (sysmoISIM-style cards, *unverified*): `K` from an HSM
+  instead of a derived secret, ICCID ranges, OTA.
+- **M8, scale.** Sharded charging engine, ledger replication, load test at 10k TPS.
+
+### Running a real network in Nigeria (notes, not legal advice)
+
+- **Licence.** The Nigerian Communications Commission (NCC) licenses operators. A Unified Access
+  Service Licence (individual licence) covers fixed, digital mobile, international gateway and
+  long-distance services; an MVNO licence (five tiers, Tier 5 nearly a full MNO) needs a filed
+  wholesale agreement with a host network. Fees and validity differ between reports and the NCC
+  has been revising the MVNO framework and has suspended issuing some licence categories:
+  *unverified* against the NCC's current published rules. Spectrum is separate (NCC auctions and
+  assignments, *unverified*). Sources: [NCC](https://ncc.gov.ng/media/803/view),
+  [DLA Piper Africa](https://www.dlapiperafrica.com/en/nigeria/insights/2024/frequently-asked-questions-on-communications-licenses.html),
+  [Aelex](https://aelex.com/wp-content/uploads/2024/05/NCC-Suspends-Issuance-of-Licences-1.pdf),
+  [Leadership](https://leadership.ng/ncc-unveils-draft-mvno-business-rules-to-deepen-telecom-competition/).
+- **Numbers.** A real MSISDN range and a real MNC come from the NCC's numbering plan; RTN keeps to
+  MCC 999 and `234999…` until then (*unverified* process).
+- **IP addresses and an ASN** come from AFRINIC. Its IPv4 pool is essentially exhausted (soft
+  landing phase 2 since 2020), so a new network plans for IPv6 (an LIR /32) and CGNAT for IPv4; an
+  ASN for BGP. AFRINIC's governance has been disrupted by litigation: check its current state and
+  fees directly. Sources: [IANA](https://www.iana.org/numbers/allocations/afrinic/asn/),
+  [ARIN 55 RIR update](https://www.arin.net/participate/meetings/ARIN55/materials/arin55_rirupdates.pdf),
+  [Wikipedia](https://en.wikipedia.org/wiki/AFRINIC).
+- **Peering.** The Internet Exchange Point of Nigeria (IXPN) in Lagos is where Nigerian networks
+  peer; membership terms and port fees are *unverified* here.
+- **Also likely:** lawful interception, SIM registration tied to NIN, data protection (NDPA) and
+  quality-of-service reporting obligations (*unverified*; read the NCC's regulations before any
+  real subscriber).

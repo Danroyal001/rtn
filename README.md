@@ -23,7 +23,7 @@ More in [docs/screens](docs/screens/).
 | A durable node: every change journalled before it is answered, replayed exactly on restart | `rtn_core::node` | Rust |
 | HTTP API and the `rtn` CLI | `core/crates/rtn-api`, `core/crates/rtn-cli` | Rust |
 | C ABI for in-process callers | `core/crates/rtn-ffi` | Rust |
-| **MyRTN**, the self-service app, and the operator console | [`app/`](app/) | [Dartvel](https://dartvel.dev) 0.12.2 |
+| **MyRTN**, the self-service app, and the operator console | [`app/`](app/) | [Dartvel](https://dartvel.dev) 0.13.18 |
 
 MyRTN is what an operator's self-care app does: sign in with your number and a code sent by SMS;
 see airtime, a data meter and every bundle; buy data for yourself or as a gift; recharge with a

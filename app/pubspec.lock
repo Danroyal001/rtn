@@ -5,10 +5,10 @@ packages:
     dependency: transitive
     description:
       name: archive
-      sha256: "0d58d1fa1fddf6588251ccf2819f3fb3b6d0452c1b2813ac7413a05592bfbefe"
+      sha256: de5ac590b8155e4e676088d714bd41ea620449a6adc0f7950c5073874b287ddb
       url: "https://pub.dev"
     source: hosted
-    version: "4.5.2"
+    version: "4.6.0"
   args:
     dependency: transitive
     description:
@@ -77,42 +77,42 @@ packages:
     dependency: "direct main"
     description:
       name: crypto
-      sha256: c8ea0233063ba03258fbcf2ca4d6dadfefe14f02fab57702265467a19f27fadf
+      sha256: e3626ae6270383c9e3a549f34c9e4cd26c09ae6a9adaab2bf4737a00340efdc4
       url: "https://pub.dev"
     source: hosted
-    version: "3.0.7"
+    version: "3.0.8"
   dartvel_cli:
     dependency: "direct dev"
     description:
       name: dartvel_cli
-      sha256: e9f83f4c7b032b0c3422c6ada021b7a4a70d7d0ff8e9d8593bfd405d17feb1a2
+      sha256: "7fe8396a0272e37d3fa8f1fe11f25afd61ce2ccfe20ed0480e4be706157ca652"
       url: "https://pub.dev"
     source: hosted
-    version: "0.12.2"
+    version: "0.13.18"
   dartvel_core:
     dependency: "direct main"
     description:
       name: dartvel_core
-      sha256: c61a03e3a4a0993ede999d0bc37d3086fce3c3c5e89beae4cb07280632d9f3c9
+      sha256: fcf9891a28e16b4f89b2a5311c0bbf509e99b6e7854d4c3d85f45647e701f744
       url: "https://pub.dev"
     source: hosted
-    version: "0.12.2"
+    version: "0.13.18"
   dartvel_flutter:
     dependency: "direct main"
     description:
       name: dartvel_flutter
-      sha256: "6462ef4ea3e28b6c1ef75b26cbd6d5d1b0b40f346f28abc6f2c6c498665794b4"
+      sha256: "2733a77a8d0940ba76bfa0b90fb213939aecbdcfd981ac44562d0d2eb267d8c2"
       url: "https://pub.dev"
     source: hosted
-    version: "0.12.2"
+    version: "0.13.18"
   dartvel_shelf:
     dependency: "direct main"
     description:
       name: dartvel_shelf
-      sha256: ab86cbae8dd3104153b0cc9c26e054e0ea68c3f0a01ad2093c22ed4078af614b
+      sha256: ea156996c406475143d069f19f05dcdad2f1fa75aedae2c90fd62535339e1320
       url: "https://pub.dev"
     source: hosted
-    version: "0.12.2"
+    version: "0.13.18"
   dbus:
     dependency: transitive
     description:
@@ -252,10 +252,10 @@ packages:
     dependency: transitive
     description:
       name: jni
-      sha256: "6b9ca0602fef0230e83149afbe3f9f8227e94f2bbe84a1da4f14d699742f402d"
+      sha256: d8df6dab6847855512fe44dd9032b0bbe34dda7bf7597e41d30750879779813f
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.0"
+    version: "1.1.1"
   jni_util:
     dependency: transitive
     description:
@@ -340,10 +340,10 @@ packages:
     dependency: transitive
     description:
       name: mix
-      sha256: dc5113001ee8904ee1b9b3f732cdb9305cab1cf237866bf92b8e1a226b5fa726
+      sha256: ab034fdec325b4f626c4c5b4fa81f2083dfce1b124c9b8dcc9047a48b1069f33
       url: "https://pub.dev"
     source: hosted
-    version: "2.2.1"
+    version: "2.3.1"
   mix_annotations:
     dependency: transitive
     description:
@@ -412,10 +412,10 @@ packages:
     dependency: transitive
     description:
       name: posix
-      sha256: bc1bad54ad2b735816e31f8d4600cfde6c7839975085ddfbca48b6c9f7c4044e
+      sha256: "613646d076944f3acc125830af935b48d4b8a57a388691547bbfd25b434f4d63"
       url: "https://pub.dev"
     source: hosted
-    version: "6.5.2"
+    version: "6.5.4"
   pub_semver:
     dependency: transitive
     description:
@@ -428,10 +428,10 @@ packages:
     dependency: transitive
     description:
       name: puppeteer
-      sha256: "272fae28aa8491b76830fba82737007938c7f8a56d6d0aa314aee0298eb2a39f"
+      sha256: d13b736a47af30a5ace7153678af3f3c1849d32cf47b2b47413ffa7e11906e3f
       url: "https://pub.dev"
     source: hosted
-    version: "3.26.0"
+    version: "3.28.0"
   record_use:
     dependency: transitive
     description:
@@ -468,10 +468,10 @@ packages:
     dependency: transitive
     description:
       name: shelf
-      sha256: e7dd780a7ffb623c57850b33f43309312fc863fb6aa3d276a754bb299839ef12
+      sha256: e75e9cf311d7fd712048038cc17c25199c38536c20330d53e7db058b543d5a48
       url: "https://pub.dev"
     source: hosted
-    version: "1.4.2"
+    version: "1.4.3"
   shelf_multipart:
     dependency: transitive
     description:
@@ -484,10 +484,10 @@ packages:
     dependency: transitive
     description:
       name: shelf_static
-      sha256: c87c3875f91262785dade62d135760c2c69cb217ac759485334c5857ad89f6e3
+      sha256: "480504af9e5323899c5be26a4f6c2fc4437d50954d39842f0290f4ae733d57b4"
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.3"
+    version: "1.2.0"
   sky_engine:
     dependency: transitive
     description: flutter
@@ -577,10 +577,10 @@ packages:
     dependency: transitive
     description:
       name: vm_service
-      sha256: "5f37239c4851efcef929cea7824e76df7f2f0970aef85d66bbc430afa40e72f0"
+      sha256: "89b11d62e1040ee681af3b4f1c97a803ecbf010c6e8b9c5896ee5b08c3bf7b78"
       url: "https://pub.dev"
     source: hosted
-    version: "15.3.0"
+    version: "15.4.0"
   watcher:
     dependency: transitive
     description:
@@ -593,10 +593,10 @@ packages:
     dependency: transitive
     description:
       name: web
-      sha256: "868d88a33d8a87b18ffc05f9f030ba328ffefba92d6c127917a2ba740f9cfe4a"
+      sha256: e119e82ac4795c7925103b7cf3768191f33941b99e7ccffbd6c645201d9f606b
       url: "https://pub.dev"
     source: hosted
-    version: "1.1.1"
+    version: "1.1.2"
   web_socket:
     dependency: transitive
     description:

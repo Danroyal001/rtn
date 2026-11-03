@@ -18,3 +18,14 @@ Widget _rtnApp(BuildContext context, RouterConfig<Object> router) {
     routerConfig: router,
   );
 }
+
+/// Registers the one app-wide value, the reader's light or dark choice, before
+/// the first frame.
+@DVBoot(entries: {DVEntryKind.app})
+void _registerThemeChoice(DVBoot boot) =>
+    DV.global<ThemeChoice>(const ThemeChoice());
+
+/// The root `DV.run` starts: [RtnApp] around the router Dartvel generated. The
+/// router is made once by Dartvel, so switching the theme keeps the page.
+@DVAppRoot()
+Widget _root(BuildContext context, DVAppParts parts) => RtnApp(parts.router);

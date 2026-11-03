@@ -1,0 +1,15 @@
+# Open5GS's UPF (user plane, TUN device) under free5GC's control plane: the
+# free5GC SMF drives it over PFCP (N4). free5GC's own UPF needs the gtp5g
+# kernel module; this one runs in user space.
+logger:
+  level: info
+upf:
+  pfcp:
+    server:
+      - address: 10.98.0.20
+  gtpu:
+    server:
+      - address: 10.98.0.20
+  session:
+    - subnet: 10.60.0.0/16
+      gateway: 10.60.0.1

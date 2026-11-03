@@ -102,6 +102,41 @@ enum Command {
     Inbox { msisdn: String },
     /// Write a snapshot and empty the journal now.
     Snapshot,
+    /// RTN on a 5G core: provision its lines into Open5GS and write UE configurations.
+    #[command(name = "5g", subcommand)]
+    FiveG(FiveG),
+}
+
+/// The SIM keys come from an operator secret and OP (hex), best set in the environment.
+#[derive(clap::Args)]
+struct SimSecrets {
+    /// The operator secret SIM keys are derived from, in hex (at least 16 bytes).
+    #[arg(long, env = "RTN_SIM_SECRET", hide_env_values = true)]
+    sim_secret: String,
+    /// The network's OP, 32 hex digits.
+    #[arg(long, env = "RTN_SIM_OP", hide_env_values = true)]
+    sim_op: String,
+}
+
+#[derive(Subcommand)]
+enum FiveG {
+    /// Make the core's subscriber database hold exactly RTN's active lines.
+    Sync {
+        /// Open5GS's MongoDB.
+        #[arg(long, env = "RTN_5GC_MONGO", default_value = "mongodb://127.0.0.1:27117")]
+        mongo: String,
+        #[command(flatten)]
+        sims: SimSecrets,
+    },
+    /// Print the UERANSIM UE configuration for a line.
+    UeConfig {
+        msisdn: String,
+        /// Where the UE finds its gNB (the radio link).
+        #[arg(long, default_value = "10.99.0.10")]
+        gnb: String,
+        #[command(flatten)]
+        sims: SimSecrets,
+    },
 }
 
 fn now_ms() -> u64 {
@@ -360,6 +395,42 @@ fn run(cli: Cli) -> Result<(), String> {
         Command::Snapshot => {
             print_json(&client.send("POST", "/v1/admin/snapshot", None)?);
             Ok(())
+        }
+        Command::FiveG(FiveG::Sync { mongo, sims }) => {
+            let sims = rtn_5gc::SimFactory::from_hex(&sims.sim_secret, &sims.sim_op).map_err(|e| e.to_string())?;
+            let lines = every_subscriber(&client)?;
+            let runtime = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+            let (written, removed) = runtime
+                .block_on(async {
+                    let core = rtn_5gc::Open5gs::connect(&mongo).await?;
+                    core.sync(&lines, &sims).await
+                })
+                .map_err(|e| e.to_string())?;
+            println!("{} RTN lines; wrote {written} to the core and removed {removed}.", lines.len());
+            Ok(())
+        }
+        Command::FiveG(FiveG::UeConfig { msisdn, gnb, sims }) => {
+            let sims = rtn_5gc::SimFactory::from_hex(&sims.sim_secret, &sims.sim_op).map_err(|e| e.to_string())?;
+            let line = client.send("GET", &format!("/v1/admin/subscribers/{msisdn}"), None)?;
+            let imsi = rtn_core::Imsi::parse(line["subscriber"]["imsi"].as_str().unwrap_or(""))
+                .map_err(|_| format!("{msisdn} has no IMSI in the answer: {line}"))?;
+            print!("{}", rtn_5gc::ueransim::ue_config(&imsi, &sims.keys(&imsi), &gnb));
+            Ok(())
+        }
+    }
+}
+
+/// Every subscriber in the registry, a page at a time.
+fn every_subscriber(client: &Client) -> Result<Vec<rtn_core::Subscriber>, String> {
+    let mut lines = Vec::new();
+    loop {
+        let page = client.send("GET", &format!("/v1/admin/subscribers?limit=500&offset={}", lines.len()), None)?;
+        let items = page["items"].as_array().cloned().unwrap_or_default();
+        if items.is_empty() {
+            return Ok(lines);
+        }
+        for item in items {
+            lines.push(serde_json::from_value(item["subscriber"].clone()).map_err(|e| e.to_string())?);
         }
     }
 }

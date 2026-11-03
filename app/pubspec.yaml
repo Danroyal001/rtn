@@ -19,15 +19,15 @@ dependencies:
   dio: ^5.5.0
   ffi: ^2.1.0
   crypto: ^3.0.6
-  dartvel_core: ^0.12.2
-  dartvel_shelf: ^0.12.2
-  dartvel_flutter: ^0.12.2
+  dartvel_core: ^0.13.18
+  dartvel_shelf: ^0.13.18
+  dartvel_flutter: ^0.13.18
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   lints: ^4.0.0
-  dartvel_cli: ^0.12.2
+  dartvel_cli: ^0.13.18
 
 flutter:
   uses-material-design: true

@@ -1,0 +1,24 @@
+[package]
+name = "rtn-5gc"
+description = "RTN's bridge into a 5G core: SIM keys, and RTN subscribers provisioned into Open5GS's subscriber database so UEs attach as RTN lines."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rtn-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+hex.workspace = true
+sha2.workspace = true
+hmac = "0.12"
+aes = "0.8"
+mongodb = "3"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+tokio.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

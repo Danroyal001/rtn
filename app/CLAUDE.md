@@ -162,10 +162,12 @@ An application reads the signal and waits; it does not drive the machinery.
 
 ## MyRTN in this repository
 
-How this app applies the rules above, and where Dartvel 0.12.2 leaves a gap.
+How this app applies the rules above, and where Dartvel leaves a gap. The app is on Dartvel 0.13.18;
+the generated block above is refreshed by the next `dartvel dev`.
 
-- `lib/main.dart` is the smallest main 0.12.2 can run, with a TODO to become `DV.run()` when
-  Dartvel ships it.
+- `lib/main.dart` is `void main(List<String> args) => DV.run(args);`. The theme choice is registered
+  by an app-only `@DVBoot` hook and `@DVAppRoot` wraps the generated router in `RtnApp`
+  (`lib/components/app.dart`), so the router is made once and a theme switch keeps the page.
 - Pages are one line in `lib/pages/**`; screens are `@DVFunctionalWidget`s in `lib/components/`.
   No `StatelessWidget`, `StatefulWidget`, `Text` or `Container` in app code: `DVBox`, `DVText`
   and signals. Async data sits in a `DVSignal<Reply<T>?>` filled by `loadInto` (`lib/services/remote.dart`).
@@ -178,10 +180,10 @@ How this app applies the rules above, and where Dartvel 0.12.2 leaves a gap.
 - Backend functions are typed: they take strings, ints and bools and return `Reply<T>` from
   `lib/services/wire.dart`, never a map and never a thrown error (Dartvel turns those into a bare
   500). `wire.dart` is the only place JSON is written; a page passes `fromJson: Reply.of(T.fromJson)`
-  because the 0.12.2 client asks for it.
+  because the 0.12.2 client asked for it (not rechecked on 0.13).
 - Access is `@DVBackendFunction(policy: 'SubscriberLine.view' | 'OperatorConsole.update' ...)`,
-  defined in `lib/policies/access.dart`. 0.12.2 has no `middleware:` field on the annotation, and
-  `DVMiddlewares.auth` refuses everything unless the server is wired for it, so policies are the gate.
+  defined in `lib/policies/access.dart`. Policies are the gate: 0.12.2 had no `middleware:` field
+  (0.13 has one) and `DVMiddlewares.auth` refused everything unless the server was wired for it.
   The line a function acts on is the session's user id (`me(ctx)`), never a request field.
 - Sign-in is a phone number and a code the RTN core sends by SMS; `lib/server/sessions.dart`
   turns a checked code into a Dartvel session. Those two functions take the `Request`, so their
@@ -193,8 +195,12 @@ How this app applies the rules above, and where Dartvel 0.12.2 leaves a gap.
   `wire.dart`, which turns its `234…` numbers into the local `0999 000 0001` form.
 - `DVBox.wrapLine`, not its compatibility alias `DVBox.wrap`. Format with `dart format .` (page
   width 120, set in `analysis_options.yaml`).
-- `FocusKeeper` (`lib/services/focus.dart`) works around a 0.12.2 web bug where the page shell
-  takes focus from a control, so Tab could not get past the top bar; remove it when Dartvel fixes it.
+- `FocusKeeper` (`lib/services/focus.dart`) works around a Dartvel web bug where the page shell
+  takes focus from a control. It is not enough: measured in headless Chrome on both 0.12.2 and 0.13.18,
+  Tab still cycles between the top bar and the page and never reaches the page's own controls.
+  Needs a fix in Dartvel; remove `FocusKeeper` with it.
+- Every screen is a `Screen` (`lib/components/ui.dart`): the scrolling area reaches the window edges
+  and the margins are inside it, because Dartvel 0.13 keeps the scrollbar on screen.
 
 Tests: `flutter test` (the services tests load `../core/target/release/librtn_ffi.so`; build it
 with `cargo build --release` in `core/`). Build: `dartvel build web-server` (set `DARTVEL_CHROME`
