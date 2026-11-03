@@ -1,0 +1,16 @@
+# UERANSIM gNB for RTN's test network (PLMN 999/70). Everything runs in one
+# network namespace, so the gNB reaches the AMF and the UPF over loopback.
+mcc: '999'
+mnc: '70'
+nci: '0x000000010'
+idLength: 32
+tac: 1
+linkIp: 10.99.0.10    # the radio link, reached by UEs in their own namespaces
+ngapIp: 127.0.0.1
+gtpIp: 127.0.0.1
+amfConfigs:
+  - address: 127.0.0.5
+    port: 38412
+slices:
+  - sst: 1
+ignoreStreamIds: true
