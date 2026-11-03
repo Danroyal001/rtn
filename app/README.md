@@ -1,7 +1,7 @@
 # MyRTN
 
 The self-service app for RTN lines, and the RTN operator console, in one
-[Dartvel](https://dartvel.dev) 0.12.2 application. It runs as a web-server binary (the backend,
+[Dartvel](https://dartvel.dev) 0.13.18 application. It runs as a web-server binary (the backend,
 the web app and server-side rendering in one file) and builds for Android.
 
 ## What a subscriber can do
@@ -30,7 +30,7 @@ desk, the SMS centre and the ledger.
 
 ```
 lib/
-  main.dart            the smallest main Dartvel 0.12.2 can run (a TODO marks where DV.run() goes)
+  main.dart            void main(List<String> args) => DV.run(args);
   pages/               one line per page; my/ and console/ each have a _guard.dart
   components/          every screen and piece of UI, as @DVFunctionalWidget functions
   backend/functions/   one typed backend function per action, each behind a @DVPolicy
