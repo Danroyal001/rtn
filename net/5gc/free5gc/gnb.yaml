@@ -1,0 +1,16 @@
+# UERANSIM gNB for the free5GC test network (PLMN 999/70, slice 1/010203).
+mcc: '999'
+mnc: '70'
+nci: '0x000000010'
+idLength: 32
+tac: 1
+linkIp: 10.98.0.30
+ngapIp: 10.98.0.30
+gtpIp: 10.98.0.30
+amfConfigs:
+  - address: 10.98.0.11
+    port: 38412
+slices:
+  - sst: 1
+    sd: 0x010203
+ignoreStreamIds: true
