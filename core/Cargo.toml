@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/rtn-core", "crates/rtn-api", "crates/rtn-cli", "crates/rtn-ffi"]
+members = ["crates/rtn-core", "crates/rtn-api", "crates/rtn-cli", "crates/rtn-ffi", "crates/rtn-5gc"]
 
 [workspace.package]
 version = "0.1.0"
